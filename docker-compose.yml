@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: cattlecoin-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cattlecoin
+      POSTGRES_USER: cattlecoin
+      POSTGRES_PASSWORD: cattlecoin
+    ports:
+      - "5432:5432"
+    volumes:
+      - cattlecoin_pgdata:/var/lib/postgresql/data
+
+volumes:
+  cattlecoin_pgdata:

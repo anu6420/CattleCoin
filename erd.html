@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cattle Tokenization — ERD</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0e;
+    --surface: #111418;
+    --surface2: #181d23;
+    --border: #252d38;
+    --border-bright: #2e3a47;
+    --text: #e8edf2;
+    --text-dim: #6b7f91;
+    --text-muted: #3d5166;
+    --amber: #f5a623;
+    --amber-dim: #a87218;
+    --amber-glow: rgba(245,166,35,0.12);
+    --teal: #2dd4bf;
+    --teal-dim: #1a8a7a;
+    --teal-glow: rgba(45,212,191,0.10);
+    --rose: #fb7185;
+    --rose-glow: rgba(251,113,133,0.10);
+    --violet: #a78bfa;
+    --violet-glow: rgba(167,139,250,0.10);
+    --sky: #38bdf8;
+    --sky-glow: rgba(56,189,248,0.10);
+    --green: #4ade80;
+    --green-glow: rgba(74,222,128,0.10);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(37,45,56,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37,45,56,0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page-wrapper {
+    position: relative;
+    z-index: 1;
+    padding: 64px 48px 96px;
+    min-width: 1400px;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 52px;
+    display: flex;
+    align-items: flex-end;
+    gap: 32px;
+  }
+
+  .header-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 8px;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards 0.1s;
+  }
+
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards 0.2s;
+  }
+
+  .header h1 span {
+    color: var(--text-dim);
+    font-weight: 300;
+  }
+
+  .header-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--amber-glow);
+    border: 1px solid var(--amber-dim);
+    border-radius: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--amber);
+    letter-spacing: 0.1em;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards 0.3s;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Main layout */
+  .erd-canvas {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(320px, 1fr));
+    grid-template-rows: auto auto auto;
+    gap: 32px;
+    position: relative;
+  }
+
+  /* Entity cards */
+  .entity {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: visible;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    min-width: 0;
+  }
+
+  .entity:hover {
+    border-color: var(--border-bright);
+  }
+
+  .entity::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .entity:hover::before {
+    opacity: 1;
+  }
+
+  /* Entity header */
+  .entity-header {
+    padding: 14px 18px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .entity-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .entity-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    flex: 1;
+  }
+
+  .entity-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+
+  /* Fields */
+  .entity-fields {
+    padding: 12px 0;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 18px;
+    transition: background 0.15s;
+    min-width: 0;
+  }
+
+  .field:hover {
+    background: rgba(255,255,255,0.02);
+  }
+
+  .field-key {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    width: 22px;
+    text-align: center;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  .field-key.pk {
+    color: var(--amber);
+    background: rgba(245,166,35,0.1);
+  }
+
+  .field-key.fk {
+    color: var(--sky);
+    background: rgba(56,189,248,0.1);
+  }
+
+  .field-key.empty {
+    background: transparent;
+  }
+
+  .field-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+  }
+
+  .field-type {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .field-type.enum-type {
+    color: var(--violet);
+    opacity: 0.8;
+  }
+
+  .field-type.unique {
+    color: var(--teal-dim);
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 18px;
+  }
+
+  /* Entity color themes */
+  .entity-user { --accent: var(--amber); --glow: var(--amber-glow); }
+  .entity-herd { --accent: var(--teal); --glow: var(--teal-glow); }
+  .entity-cow { --accent: var(--green); --glow: var(--green-glow); }
+  .entity-token { --accent: var(--violet); --glow: var(--violet-glow); }
+  .entity-ownership { --accent: var(--sky); --glow: var(--sky-glow); }
+  .entity-transaction { --accent: var(--rose); --glow: var(--rose-glow); }
+
+  .entity-user { animation-delay: 0.15s; }
+  .entity-herd { animation-delay: 0.25s; }
+  .entity-cow { animation-delay: 0.35s; }
+  .entity-token { animation-delay: 0.45s; }
+  .entity-ownership { animation-delay: 0.55s; }
+  .entity-transaction { animation-delay: 0.65s; }
+
+  .entity-user { border-top: 2px solid var(--amber); }
+  .entity-herd { border-top: 2px solid var(--teal); }
+  .entity-cow { border-top: 2px solid var(--green); }
+  .entity-token { border-top: 2px solid var(--violet); }
+  .entity-ownership { border-top: 2px solid var(--sky); }
+  .entity-transaction { border-top: 2px solid var(--rose); }
+
+  .entity-user .entity-icon { background: rgba(245,166,35,0.12); }
+  .entity-herd .entity-icon { background: rgba(45,212,191,0.12); }
+  .entity-cow .entity-icon { background: rgba(74,222,128,0.12); }
+  .entity-token .entity-icon { background: rgba(167,139,250,0.12); }
+  .entity-ownership .entity-icon { background: rgba(56,189,248,0.12); }
+  .entity-transaction .entity-icon { background: rgba(251,113,133,0.12); }
+
+  .entity-user .entity-name { color: var(--amber); }
+  .entity-herd .entity-name { color: var(--teal); }
+  .entity-cow .entity-name { color: var(--green); }
+  .entity-token .entity-name { color: var(--violet); }
+  .entity-ownership .entity-name { color: var(--sky); }
+  .entity-transaction .entity-name { color: var(--rose); }
+
+  .entity-user .entity-tag { color: var(--amber); background: rgba(245,166,35,0.08); border: 1px solid rgba(245,166,35,0.2); }
+  .entity-herd .entity-tag { color: var(--teal); background: rgba(45,212,191,0.08); border: 1px solid rgba(45,212,191,0.2); }
+  .entity-cow .entity-tag { color: var(--green); background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); }
+  .entity-token .entity-tag { color: var(--violet); background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.2); }
+  .entity-ownership .entity-tag { color: var(--sky); background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2); }
+  .entity-transaction .entity-tag { color: var(--rose); background: rgba(251,113,133,0.08); border: 1px solid rgba(251,113,133,0.2); }
+
+  /* Hover glow effect per entity */
+  .entity-user:hover { box-shadow: 0 0 0 1px rgba(245,166,35,0.2), 0 4px 24px rgba(245,166,35,0.06); border-color: rgba(245,166,35,0.3); }
+  .entity-herd:hover { box-shadow: 0 0 0 1px rgba(45,212,191,0.2), 0 4px 24px rgba(45,212,191,0.06); border-color: rgba(45,212,191,0.3); }
+  .entity-cow:hover { box-shadow: 0 0 0 1px rgba(74,222,128,0.2), 0 4px 24px rgba(74,222,128,0.06); border-color: rgba(74,222,128,0.3); }
+  .entity-token:hover { box-shadow: 0 0 0 1px rgba(167,139,250,0.2), 0 4px 24px rgba(167,139,250,0.06); border-color: rgba(167,139,250,0.3); }
+  .entity-ownership:hover { box-shadow: 0 0 0 1px rgba(56,189,248,0.2), 0 4px 24px rgba(56,189,248,0.06); border-color: rgba(56,189,248,0.3); }
+  .entity-transaction:hover { box-shadow: 0 0 0 1px rgba(251,113,133,0.2), 0 4px 24px rgba(251,113,133,0.06); border-color: rgba(251,113,133,0.3); }
+
+  /* Grid placement */
+  .entity-user { grid-column: 1; grid-row: 1; }
+  .entity-herd { grid-column: 2; grid-row: 1; }
+  .entity-cow { grid-column: 3; grid-row: 1; }
+  .entity-token { grid-column: 4; grid-row: 1; }
+  .entity-ownership { grid-column: 2 / span 2; grid-row: 2; }
+  .entity-transaction { grid-column: 1 / span 5; grid-row: 3; }
+
+  /* Relationship SVG overlay */
+  .relations-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    overflow: visible;
+  }
+
+  .rel-line {
+    stroke-dasharray: 6 4;
+    stroke-dashoffset: 0;
+    animation: dash 20s linear infinite;
+  }
+
+  @keyframes dash {
+    to { stroke-dashoffset: -200; }
+  }
+
+  /* Relationship cards */
+  .relations-section {
+    margin-top: 36px;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards 0.8s;
+  }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .relations-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .rel-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    transition: border-color 0.2s;
+  }
+
+  .rel-pill:hover { border-color: var(--border-bright); }
+
+  .rel-from { font-weight: 600; }
+  .rel-card { color: var(--text-dim); font-weight: 400; }
+  .rel-arrow { color: var(--text-muted); }
+
+  .rel-pill .bullet {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Legend */
+  .legend {
+    margin-top: 28px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards 0.9s;
+  }
+
+  .legend-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .legend-key {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .legend-key.pk { color: var(--amber); background: rgba(245,166,35,0.1); }
+  .legend-key.fk { color: var(--sky); background: rgba(56,189,248,0.1); }
+
+  /* Note card */
+  .note-card {
+    margin-top: 0;
+    padding: 14px 18px;
+    background: rgba(167,139,250,0.05);
+    border: 1px solid rgba(167,139,250,0.15);
+    border-radius: 6px;
+    grid-column: 4;
+    grid-row: 2 / span 2;
+  }
+
+  .note-card-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--violet);
+    margin-bottom: 12px;
+  }
+
+  .note-item {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 8px;
+    padding-left: 12px;
+    position: relative;
+  }
+  /* Info panels */
+  .info-panel {
+    grid-column: 5;
+    grid-row: 1;
+    background: rgba(99,102,241,0.08);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 10px;
+    padding: 20px;
+    opacity: 0;
+    animation: fadeUp 0.6s ease forwards 0.5s;
+  }
+
+  .info-panel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin-bottom: 16px;
+  }
+
+  .info-item {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 10px;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .info-item::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--indigo);
+    font-size: 10px;
+    top: 2px;
+  }
+
+  .info-item code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--indigo);
+    background: rgba(99,102,241,0.12);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+
+  .note-item::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--violet);
+    font-size: 9px;
+    top: 2px;
+  }
+
+  .note-item code {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--violet);
+    background: rgba(167,139,250,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* Grid wrapper */
+  .erd-wrapper {
+    position: relative;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Blockchain badge on TokenPool */
+  .chain-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--violet);
+    background: rgba(167,139,250,0.08);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-top: 2px;
+  }
+
+  .field-note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    padding: 0 18px 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .field-note::before {
+    content: '→';
+    color: var(--amber);
+    font-size: 10px;
+  }
+
+  .ownership-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .ownership-col { padding: 0; }
+  .ownership-col:first-child { border-right: 1px solid var(--border); }
+
+  .entity-ownership .entity-fields { padding: 0; }
+
+  /* SVG arrows */
+  .arrows-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 5;
+    overflow: visible;
+  }
+</style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <div class="header">
+    <div>
+      <div class="header-title">Entity Relationship Diagram</div>
+      <h1>Cattle Tokenization <span>Platform</span></h1>
+    </div>
+    <div class="header-badge">
+      <div class="dot"></div>
+      ERC-20 · Ethereum · Fractional Ownership
+    </div>
+  </div>
+
+  <div class="erd-wrapper">
+    <div class="erd-canvas">
+
+      <!-- USER -->
+      <div class="entity entity-user">
+        <div class="entity-header">
+          <div class="entity-icon">👤</div>
+          <div class="entity-name">User</div>
+          <div class="entity-tag">Core</div>
+        </div>
+        <div class="entity-fields">
+          <div class="field">
+            <span class="field-key pk">PK</span>
+            <span class="field-name">user_id</span>
+            <span class="field-type">uuid</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">role</span>
+            <span class="field-type enum-type">ENUM</span>
+          </div>
+          <div class="field-note">investor | rancher</div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">email</span>
+            <span class="field-type unique">UNIQUE</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">password_hash</span>
+            <span class="field-type">text</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">wallet_address</span>
+            <span class="field-type">varchar</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">created_at</span>
+            <span class="field-type">timestamp</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- HERD -->
+      <div class="entity entity-herd">
+        <div class="entity-header">
+          <div class="entity-icon">🐄</div>
+          <div class="entity-name">Herd</div>
+          <div class="entity-tag">Asset</div>
+        </div>
+        <div class="entity-fields">
+          <div class="field">
+            <span class="field-key pk">PK</span>
+            <span class="field-name">herd_id</span>
+            <span class="field-type">uuid</span>
+          </div>
+          <div class="field">
+            <span class="field-key fk">FK</span>
+            <span class="field-name">rancher_id</span>
+            <span class="field-type">→ User</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">listing_price</span>
+            <span class="field-type">decimal</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">purchase_status</span>
+            <span class="field-type">varchar</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">created_at</span>
+            <span class="field-type">timestamp</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- COW (Enhanced with schema fields) -->
+    <div class="entity entity-cow">
+      <div class="entity-header">
+        <div class="entity-icon">🐂</div>
+        <div class="entity-name">Cow</div>
+        <div class="entity-tag">Animal</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">cow_id</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">herd_id</span>
+          <span class="field-type">→ Herd</span>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">registration_number</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">official_id</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">animal_name</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">breed_code</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">sex_code</span>
+          <span class="field-type">char(1)</span>
+        </div>
+        <div class="field-note">B, C, H, S</div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">birth_date</span>
+          <span class="field-type">date</span>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">sire_registration_number</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">dam_registration_number</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">is_genomic_enhanced</span>
+          <span class="field-type">boolean</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">created_at</span>
+          <span class="field-type">timestamp</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOKEN POOL -->
+    <div class="entity entity-token">
+      <div class="entity-header">
+        <div class="entity-icon">⬡</div>
+        <div class="entity-name">TokenPool</div>
+        <div class="entity-tag">On-Chain</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">pool_id</span>
+          <span class="field-type">uuid</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">herd_id</span>
+          <span class="field-type unique">→ Herd UNIQ</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">total_supply</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">contract_address</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">created_at</span>
+          <span class="field-type">timestamp</span>
+        </div>
+        <div class="divider"></div>
+        <div class="field-note" style="color: var(--indigo);">ERC-20 · 1 Herd = 1 Contract</div>
+      </div>
+    </div>
+
+    <!-- Blockchain Info Panel -->
+    <div class="info-panel">
+      <div class="info-panel-title">⛓ Blockchain Sync</div>
+      <div class="info-item"><code>TokenPool</code> stores contract address</div>
+      <div class="info-item"><code>Ownership</code> mirrors on-chain balances</div>
+      <div class="info-item"><code>Transaction</code> stores tx hashes for audit</div>
+      <div class="info-item">One ERC-20 contract deployed per Herd</div>
+      <div class="info-item"><code>mapping(address ⇒ uint256)</code> balances</div>
+      <div class="info-item">Mint / transfer logic on-chain</div>
+    </div>
+
+    <!-- OWNERSHIP -->
+    <div class="entity entity-ownership">
+      <div class="entity-header">
+        <div class="entity-icon">⚖️</div>
+        <div class="entity-name">Ownership</div>
+        <div class="entity-tag">Junction</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: none;">
+        <div style="border-right: 1px solid var(--border); padding: 12px 0;">
+          <div class="field">
+            <span class="field-key pk">PK</span>
+            <span class="field-name">ownership_id</span>
+            <span class="field-type">uuid</span>
+          </div>
+          <div class="field">
+            <span class="field-key fk">FK</span>
+            <span class="field-name">user_id</span>
+            <span class="field-type">→ User</span>
+          </div>
+          <div class="field">
+            <span class="field-key fk">FK</span>
+            <span class="field-name">pool_id</span>
+            <span class="field-type">→ TokenPool</span>
+          </div>
+        </div>
+        <div style="padding: 12px 0;">
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">token_amount</span>
+            <span class="field-type">bigint</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">acquired_at</span>
+            <span class="field-type">timestamp</span>
+          </div>
+          <div style="padding: 8px 20px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--cyan); background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.25); border-radius: 4px; padding: 4px 8px; display: inline-block;">User × TokenPool M:M</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSACTION -->
+    <div class="entity entity-transaction" style="grid-column: 1 / span 3;">
+      <div class="entity-header">
+        <div class="entity-icon">⚡</div>
+        <div class="entity-name">Transaction</div>
+        <div class="entity-tag">Audit</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); border-top: none;">
+        <div style="border-right: 1px solid var(--border); padding: 10px 0;">
+          <div class="field">
+            <span class="field-key pk">PK</span>
+            <span class="field-name">transaction_id</span>
+            <span class="field-type">uuid</span>
+          </div>
+          <div class="field">
+            <span class="field-key fk">FK</span>
+            <span class="field-name">user_id</span>
+            <span class="field-type">→ User</span>
+          </div>
+        </div>
+        <div style="border-right: 1px solid var(--border); padding: 10px 0;">
+          <div class="field">
+            <span class="field-key fk">FK</span>
+            <span class="field-name">pool_id</span>
+            <span class="field-type">→ TokenPool</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">type</span>
+            <span class="field-type enum">ENUM</span>
+          </div>
+          <div class="field-note" style="padding-left: 20px;">buy·sell·mint·redeem</div>
+        </div>
+        <div style="border-right: 1px solid var(--border); padding: 10px 0;">
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">amount</span>
+            <span class="field-type">decimal</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">status</span>
+            <span class="field-type">varchar</span>
+          </div>
+        </div>
+        <div style="padding: 10px 0;">
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">blockchain_tx_hash</span>
+            <span class="field-type">varchar</span>
+          </div>
+          <div class="field">
+            <span class="field-key empty"></span>
+            <span class="field-name">created_at</span>
+            <span class="field-type">timestamp</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- COW WEIGHTS -->
+    <div class="entity entity-weight entity-compact">
+      <div class="entity-header">
+        <div class="entity-icon">📊</div>
+        <div class="entity-name">CowWeights</div>
+        <div class="entity-tag">Growth</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">weight_id</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">cow_id</span>
+          <span class="field-type">→ Cow</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">weight_date</span>
+          <span class="field-type">date</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">weight_lbs</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">weight_type</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field-note">birth, weaning, yearling, sale</div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">location_code</span>
+          <span class="field-type">varchar</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COW EPDs -->
+    <div class="entity entity-epd entity-compact">
+      <div class="entity-header">
+        <div class="entity-icon">🧬</div>
+        <div class="entity-name">CowEPDs</div>
+        <div class="entity-tag">Genetics</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">cow_epd_id</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">cow_id</span>
+          <span class="field-type">→ Cow</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">trait_code</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field-note">WW, YW, CW, MARB, etc.</div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">epd_value</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">accuracy</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">percentile_rank</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">evaluation_date</span>
+          <span class="field-type">date</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COW HEALTH -->
+    <div class="entity entity-health entity-compact">
+      <div class="entity-header">
+        <div class="entity-icon">💉</div>
+        <div class="entity-name">CowHealth</div>
+        <div class="entity-tag">Health</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">health_record_id</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">cow_id</span>
+          <span class="field-type">→ Cow</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">vaccine_name</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">administration_date</span>
+          <span class="field-type">date</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">health_program_name</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field-note">NHTC, IMI Global, etc.</div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">certification_number</span>
+          <span class="field-type">varchar</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">verified_flag</span>
+          <span class="field-type">boolean</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- COW VALUATION -->
+    <div class="entity entity-valuation">
+      <div class="entity-header">
+        <div class="entity-icon">💰</div>
+        <div class="entity-name">CowValuation</div>
+        <div class="entity-tag">Calc</div>
+      </div>
+      <div class="entity-fields">
+        <div class="field">
+          <span class="field-key pk">PK</span>
+          <span class="field-name">valuation_id</span>
+          <span class="field-type">bigint</span>
+        </div>
+        <div class="field">
+          <span class="field-key fk">FK</span>
+          <span class="field-name">cow_id</span>
+          <span class="field-type">→ Cow</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">valuation_date</span>
+          <span class="field-type">timestamp</span>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">genetics_score</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">health_score</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">weight_score</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">certification_score</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">total_value</span>
+          <span class="field-type">decimal</span>
+        </div>
+        <div class="field">
+          <span class="field-key empty"></span>
+          <span class="field-name">valuation_method_version</span>
+          <span class="field-type">varchar</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Relationships -->
+  <div class="relations-section">
+    <div class="section-title" style="margin-bottom: 20px;">Relationships · Cardinality</div>
+    <div class="relations-grid">
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--gold)"></div>
+        <span class="rel-from" style="color: var(--gold)">User</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--emerald)">Herd M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--emerald)"></div>
+        <span class="rel-from" style="color: var(--emerald)">Herd</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--lime)">Cow M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--emerald)"></div>
+        <span class="rel-from" style="color: var(--emerald)">Herd</span>
+        <span class="rel-arrow">1 ─── 1</span>
+        <span class="rel-to" style="color: var(--indigo)">TokenPool</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--gold)"></div>
+        <span class="rel-from" style="color: var(--gold)">User</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--cyan)">Ownership M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--indigo)"></div>
+        <span class="rel-from" style="color: var(--indigo)">TokenPool</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--cyan)">Ownership M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--gold)"></div>
+        <span class="rel-from" style="color: var(--gold)">User</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--pink)">Transaction M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--indigo)"></div>
+        <span class="rel-from" style="color: var(--indigo)">TokenPool</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--pink)">Transaction M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--lime)"></div>
+        <span class="rel-from" style="color: var(--lime)">Cow</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--blue)">CowWeights M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--lime)"></div>
+        <span class="rel-from" style="color: var(--lime)">Cow</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--purple)">CowEPDs M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--lime)"></div>
+        <span class="rel-from" style="color: var(--lime)">Cow</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--orange)">CowHealth M</span>
+      </div>
+      <div class="rel-pill">
+        <div class="bullet" style="background: var(--lime)"></div>
+        <span class="rel-from" style="color: var(--lime)">Cow</span>
+        <span class="rel-arrow">1 ──&lt;</span>
+        <span class="rel-to" style="color: var(--emerald)">CowValuation M</span>
+      </div>
+      <div class="rel-pill" style="background: rgba(6,182,212,0.06); border-color: rgba(6,182,212,0.3);">
+        <div class="bullet" style="background: var(--cyan)"></div>
+        <span style="font-weight: 700; color: var(--cyan);">User ⇄ TokenPool</span>
+        <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">M:M via Ownership</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <span class="legend-label">Legend</span>
+    <div class="legend-item"><span class="legend-key pk">PK</span> Primary Key</div>
+    <div class="legend-item"><span class="legend-key fk">FK</span> Foreign Key</div>
+    <div class="legend-item" style="font-size: 12px; color: var(--purple);">ENUM</div>
+    <div class="legend-item" style="font-size: 12px; color: var(--emerald);">UNIQ</div>
+  </div>
+
+</div>
+</body>
+</html>
