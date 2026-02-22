@@ -82,13 +82,13 @@ export function Dashboard() {
               trend={data.change30dPct >= 0 ? "up" : "down"}
             />
             <KpiCard
-              title="Pools Held"
+              title="Lots Held"
               value={String(data.poolsHeld)}
             />
             <KpiCard
-              title="Avg Risk"
-              value={String(data.avgRisk)}
-              subtitle="out of 100"
+              title="Risk Score"
+              value="—"
+              subtitle="pending backend"
               trend="neutral"
             />
           </>

@@ -87,10 +87,10 @@ export function PoolsTable({
       <TableHeader>
         <TableRow>
           <TableHead>
-            <SortHeader label="Pool / Herd" field="name" />
+            <SortHeader label="Lot" field="name" />
           </TableHead>
           <TableHead>
-            <SortHeader label="Herd Size" field="backingHerdCount" />
+            <SortHeader label="Head Count" field="backingHerdCount" />
           </TableHead>
           <TableHead>
             <SortHeader label="Position Value" field="positionValueUsd" />
@@ -122,20 +122,16 @@ export function PoolsTable({
                   <p className="font-medium">{p.name}</p>
                   <Badge
                     variant="outline"
-                    className={
-                      p.poolType === "individual"
-                        ? "bg-sky-50 text-sky-700 border-sky-200 text-[10px] px-1.5 py-0"
-                        : "bg-slate-50 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"
-                    }
+                    className="bg-slate-50 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0"
                   >
-                    {p.poolType === "individual" ? "Individual" : "Herd"}
+                    Lot
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{p.id}</p>
               </div>
             </TableCell>
             <TableCell className="font-medium">
-              {p.backingHerdCount} {p.poolType === "individual" ? (p.backingHerdCount === 1 ? "cow" : "cows") : "head"}
+              {p.backingHerdCount} head
             </TableCell>
             <TableCell className="font-medium">
               {formatUsd(p.positionValueUsd)}

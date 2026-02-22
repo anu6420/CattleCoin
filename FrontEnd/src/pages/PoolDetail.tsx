@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronRight, FileText, ShieldCheck, ClipboardList, ArrowLeftRight, Award, Shield } from "lucide-react";
+import { ChevronRight, FileText, ShieldCheck, ClipboardList, ArrowLeftRight, Award, Shield, PlusCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { KpiCard, KpiCardSkeleton } from "@/components/common/KpiCard";
 import { StageBadge } from "@/components/common/StageBadge";
 import { VerifiedBadge } from "@/components/common/VerifiedBadge";
@@ -33,6 +34,10 @@ export function PoolDetail() {
   const [loading, setLoading] = useState(true);
   const [cowsLoading, setCowsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  function handleRemoveCow(cowId: string) {
+    setCows((prev) => prev.filter((c) => c.cowId !== cowId));
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -103,13 +108,9 @@ export function PoolDetail() {
               <h2 className="text-2xl font-bold">{data.pool.name}</h2>
               <Badge
                 variant="outline"
-                className={
-                  data.pool.poolType === "individual"
-                    ? "bg-sky-50 text-sky-700 border-sky-200"
-                    : "bg-slate-50 text-slate-600 border-slate-200"
-                }
+                className="bg-slate-50 text-slate-600 border-slate-200"
               >
-                {data.pool.poolType === "individual" ? "Individual" : "Herd Pool"}
+                Lot
               </Badge>
             </div>
             <div className="flex items-center gap-2 mt-1">
@@ -122,6 +123,10 @@ export function PoolDetail() {
                   </span>
                 </>
               )}
+              <Separator orientation="vertical" className="h-3" />
+              <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                {data.pool.geneticsLabel}
+              </span>
               <StageBadge stage={data.pool.dominantStage} />
               <VerifiedBadge verified={data.pool.verified} showLabel />
             </div>
@@ -141,16 +146,16 @@ export function PoolDetail() {
         ) : data ? (
           <>
             <KpiCard
-              title={data.pool.poolType === "individual" ? "Tokens Owned" : "ERC-20 Balance"}
+              title="Tokens Held (ERC-20)"
               value={formatNumber(data.pool.erc20Balance)}
-              subtitle={data.pool.poolType === "individual" ? "1 token = 1 cow" : "tokens"}
+              subtitle="of 20 issued"
             />
             <KpiCard
-              title={data.pool.poolType === "individual" ? "Cattle Owned" : "Backing Herd"}
-              value={`${data.pool.backingHerdCount} ${data.pool.poolType === "individual" ? (data.pool.backingHerdCount === 1 ? "cow" : "cows") : "head"}`}
+              title="Lot Size"
+              value={`${data.pool.backingHerdCount} head`}
             />
             <KpiCard
-              title="Cost-to-Date"
+              title="Investment to Date"
               value={formatUsd(data.pool.totalCostUsd)}
             />
             <KpiCard
@@ -288,23 +293,35 @@ export function PoolDetail() {
         </Card>
       ) : null}
 
-      {/* Backing Cows Table */}
+      {/* Cattle Records Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {data?.pool.poolType === "individual" ? "Your Cattle" : "Backing Cows"} ({cowsLoading ? "..." : cows.length})
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">
+              Individual Cattle Records ({cowsLoading ? "..." : cows.length} head)
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              disabled
+              title="Add cattle — coming soon"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              Add Cattle
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {cowsLoading ? (
             <CowsTableSkeleton rows={6} />
           ) : cows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No backing cows found for this pool.
+              No cattle records found for this lot.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <CowsTable cows={cows} />
+              <CowsTable cows={cows} onRemove={handleRemoveCow} />
             </div>
           )}
         </CardContent>

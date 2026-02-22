@@ -19,7 +19,7 @@ export const STAGES: Stage[] = [
 
 // ── Pool / Herd (ERC-20 concept) ─────────────────────────────────────────────
 
-export type PoolType = "herd" | "individual";
+export type PoolType = "herd";
 
 export type StageBreakdown = {
   stage: Stage;
@@ -31,7 +31,9 @@ export type Pool = {
   name: string;
   poolType: PoolType;
   cohortLabel?: string;
-  erc20Balance: number;
+  geneticsLabel: string;   // e.g. "Angus AI Genetics", "Hereford Select"
+  season: "Spring" | "Fall";
+  erc20Balance: number;    // tokens issued for this lot
   positionValueUsd: number;
   backingHerdCount: number;
   totalCostUsd: number;
@@ -47,12 +49,16 @@ export type Pool = {
 
 export type CowHealth = "On Track" | "Watch" | "Issue";
 
+export type CowSource = "Ranch" | "Dairy";
+
 export type Cow = {
   cowId: string;
   tokenId: number;
   poolId: string;
   stage: Stage;
   ranchOrFacility: string;
+  breed: string;
+  source: CowSource;
   weightLb: number;
   health: CowHealth;
   daysInStage: number;

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/investor", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/investor/holdings", label: "Holdings", icon: Warehouse, end: false },
+  { to: "/investor/holdings", label: "Lots", icon: Warehouse, end: false },
   { to: "/rancher", label: "Rancher", icon: User, end: false },
 ] as const;
 

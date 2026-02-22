@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Trash2 } from "lucide-react";
 import {
   Table,
   TableHeader,
@@ -9,6 +9,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StageBadge } from "@/components/common/StageBadge";
 import { VerifiedBadge } from "@/components/common/VerifiedBadge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +20,8 @@ type CowSortKey =
   | "tokenId"
   | "cowId"
   | "stage"
+  | "breed"
+  | "source"
   | "weightLb"
   | "health"
   | "daysInStage"
@@ -34,9 +37,10 @@ const HEALTH_STYLES: Record<CowHealth, string> = {
 
 interface CowsTableProps {
   cows: Cow[];
+  onRemove?: (cowId: string) => void;
 }
 
-export function CowsTable({ cows }: CowsTableProps) {
+export function CowsTable({ cows, onRemove }: CowsTableProps) {
   const [sortKey, setSortKey] = useState<CowSortKey>("tokenId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -58,6 +62,10 @@ export function CowsTable({ cows }: CowsTableProps) {
         return dir * a.cowId.localeCompare(b.cowId);
       case "stage":
         return dir * a.stage.localeCompare(b.stage);
+      case "breed":
+        return dir * a.breed.localeCompare(b.breed);
+      case "source":
+        return dir * a.source.localeCompare(b.source);
       case "weightLb":
         return dir * (a.weightLb - b.weightLb);
       case "health":
@@ -107,10 +115,16 @@ export function CowsTable({ cows }: CowsTableProps) {
             <SortHeader label="Token" field="tokenId" />
           </TableHead>
           <TableHead>
-            <SortHeader label="Cow ID" field="cowId" />
+            <SortHeader label="Cattle ID" field="cowId" />
           </TableHead>
           <TableHead>
             <SortHeader label="Stage" field="stage" />
+          </TableHead>
+          <TableHead>
+            <SortHeader label="Breed" field="breed" />
+          </TableHead>
+          <TableHead>
+            <SortHeader label="Source" field="source" />
           </TableHead>
           <TableHead>Facility</TableHead>
           <TableHead>
@@ -123,7 +137,7 @@ export function CowsTable({ cows }: CowsTableProps) {
             <SortHeader label="Days" field="daysInStage" />
           </TableHead>
           <TableHead>
-            <SortHeader label="Cost-to-date" field="costToDateUsd" />
+            <SortHeader label="Investment to Date" field="costToDateUsd" />
           </TableHead>
           <TableHead>
             <SortHeader label="Projected Exit" field="projectedExitUsd" />
@@ -131,6 +145,7 @@ export function CowsTable({ cows }: CowsTableProps) {
           <TableHead>
             <SortHeader label="Updated" field="updatedIso" />
           </TableHead>
+          {onRemove && <TableHead />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -145,6 +160,19 @@ export function CowsTable({ cows }: CowsTableProps) {
             </TableCell>
             <TableCell>
               <StageBadge stage={cow.stage} />
+            </TableCell>
+            <TableCell className="text-sm">{cow.breed}</TableCell>
+            <TableCell>
+              <Badge
+                variant="outline"
+                className={
+                  cow.source === "Dairy"
+                    ? "bg-blue-50 text-blue-700 border-blue-200 text-xs"
+                    : "bg-green-50 text-green-700 border-green-200 text-xs"
+                }
+              >
+                {cow.source}
+              </Badge>
             </TableCell>
             <TableCell className="max-w-[160px] truncate text-xs text-muted-foreground">
               {cow.ranchOrFacility}
@@ -165,6 +193,19 @@ export function CowsTable({ cows }: CowsTableProps) {
             <TableCell className="text-xs text-muted-foreground">
               {formatDate(cow.updatedIso)}
             </TableCell>
+            {onRemove && (
+              <TableCell>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={() => onRemove(cow.cowId)}
+                  title="Remove from lot"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

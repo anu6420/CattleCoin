@@ -152,7 +152,17 @@ export function CowDetail() {
                 </div>
                 <Separator />
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Cost-to-Date</dt>
+                  <dt className="text-muted-foreground">Breed</dt>
+                  <dd className="font-medium">{cow.breed}</dd>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Source</dt>
+                  <dd className="font-medium">{cow.source}</dd>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Investment to Date</dt>
                   <dd className="font-medium">{formatUsd(cow.costToDateUsd)}</dd>
                 </div>
                 <Separator />
