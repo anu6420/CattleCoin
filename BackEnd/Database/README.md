@@ -10,6 +10,7 @@ We manage all schema changes using **versioned SQL migration files**. This keeps
 
 - `migrations/` — versioned SQL migration files (`001_*.sql`, `002_*.sql`, ...)
 - `runMigrations.sh` — runs all migrations in order against the Docker Postgres container
+- `seeds/` - scripts to insert data
 
 ---
 

@@ -5,7 +5,7 @@ DB_CONTAINER="cattlecoin-db"
 DB_USER="cattlecoin"
 DB_NAME="cattlecoin"
 
-MIGRATIONS_DIR="BackEnd/Database/migrations"
+MIGRATIONS_DIR="./migrations"
 
 for file in "$MIGRATIONS_DIR"/*.sql; do
   [ -f "$file" ] || continue
