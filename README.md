@@ -10,6 +10,7 @@ A cattle tokenization platform that lets investors buy fractional ERC-20 ownersh
 CattleCoin/
 ├── FrontEnd/              React + TypeScript investor dashboard
 ├── BackEnd/
+│   ├── src/               Express API server
 │   └── Database/          Postgres schema + Docker setup
 ├── docker-compose.yml     Starts the local Postgres database
 ├── erd.html               Entity Relationship Diagram (open in browser)
@@ -30,7 +31,15 @@ CattleCoin/
 
 ## Running the App for Development
 
-### 1 — Start the database
+### 1 — Environment variables
+
+Copy `.env.example` to `.env` in the repo root:
+
+```bash
+cp .env.example .env
+```
+
+### 2 — Start the database
 
 ```bash
 # From the repo root
@@ -44,14 +53,30 @@ docker ps
 # should show cattlecoin-db on port 5432
 ```
 
-Run migrations to apply the schema:
+### 3 — Run migrations
 
 ```bash
 chmod +x BackEnd/Database/runMigrations.sh
 ./BackEnd/Database/runMigrations.sh
 ```
 
-### 2 — Start the frontend
+### 4 — Start the backend
+
+```bash
+cd BackEnd
+npm install
+npm run dev
+```
+
+The API server runs on **http://localhost:3000**.
+
+Verify it's up:
+
+```
+GET http://localhost:3000/api/health
+```
+
+### 5 — Start the frontend
 
 ```bash
 cd FrontEnd
@@ -61,23 +86,18 @@ npm run dev
 
 Open **http://localhost:5173** — you will be redirected to `/investor`.
 
-> The frontend currently runs entirely on mock data. No backend API server is required to use the investor dashboard.
-
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` in the repo root:
-
-```bash
-cp .env.example .env
-```
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `POSTGRES_DB` | `cattlecoin` | Database name |
-| `POSTGRES_USER` | `cattlecoin` | Database user |
-| `POSTGRES_PASSWORD` | `cattlecoin` | Database password |
+| `DATABASE_URL` | `postgresql://cattlecoin:cattlecoin@localhost:5432/cattlecoin` | Backend DB connection string |
+| `POSTGRES_DB` | `cattlecoin` | Database name (Docker) |
+| `POSTGRES_USER` | `cattlecoin` | Database user (Docker) |
+| `POSTGRES_PASSWORD` | `cattlecoin` | Database password (Docker) |
+
+> **WSL2 users:** Docker Desktop does not forward container ports to WSL2's loopback. Replace `localhost` in `DATABASE_URL` with the output of `ip route | grep default | awk '{print $3}'`.
 
 ---
 
@@ -92,12 +112,24 @@ See [BackEnd/Database/README.md](BackEnd/Database/README.md) for full database d
 
 ---
 
+## Backend
+
+- **Framework**: Express 5 + Node.js
+- **Port**: 3000
+- **DB client**: node-postgres (`pg`)
+
+See [BackEnd/README.md](BackEnd/README.md) for full backend docs.
+
+---
+
 ## Frontend
 
 - **Framework**: React 19 + TypeScript + Vite
 - **Styling**: Tailwind CSS v4 + shadcn/ui
 - **Charts**: Recharts
 - **Router**: React Router v7
+
+> The frontend currently uses mock data. API calls are in `FrontEnd/src/lib/api.ts` — each function has a `// TODO: replace with fetch(...)` comment ready for wiring to the backend.
 
 See [FrontEnd/README.md](FrontEnd/README.md) for full frontend docs.
 
@@ -109,29 +141,38 @@ Open `erd.html` in a browser to view the full interactive diagram. Core tables:
 
 | Table | Description |
 |-------|-------------|
-| `User` | Investors and ranchers |
-| `Herd` | A physical cattle herd owned by a rancher |
-| `Cow` | Individual animal records (registration, breed, sex, lineage, genomics) |
-| `TokenPool` | ERC-20 token contract — one per Herd |
-| `Ownership` | Investor ↔ TokenPool many-to-many (token balances) |
-| `Transaction` | On-chain buy/sell/mint/redeem audit log |
-| `CowWeights` | Time-series weight records per animal |
-| `CowEPDs` | Expected Progeny Differences (genetic trait scores) |
-| `CowHealth` | Vaccination and health program records |
-| `CowValuation` | Scoring-based valuation snapshots per animal |
+| `users` | Investors and ranchers |
+| `herds` | A physical cattle herd owned by a rancher |
+| `animals` | Individual animal records (registration, breed, sex, lineage, genomics) |
+| `token_pools` | ERC-20 token contract — one per herd |
+| `ownership` | Investor ↔ token pool many-to-many (token balances) |
+| `transactions` | On-chain buy/sell/mint/redeem audit log |
+| `animal_weights` | Time-series weight records per animal |
+| `animal_epds` | Expected Progeny Differences (genetic trait scores) |
+| `cow_health` | Vaccination and health program records |
+| `cow_valuation` | Scoring-based valuation snapshots per animal |
 
 ---
 
-## Connecting the Frontend to a Real API
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Server + DB status check |
+| `GET` | `/api/pools` | All herds/investment pools |
+
+---
+
+## Connecting the Frontend to the Backend
 
 All API calls are in `FrontEnd/src/lib/api.ts`. Each function has a `// TODO: replace with fetch(...)` comment:
 
-| Function | Current | Planned Endpoint |
-|----------|---------|-----------------|
-| `getPortfolio()` | mock aggregation | `GET /api/portfolio` |
-| `getPools()` | mock array | `GET /api/pools` |
-| `getPoolById(id)` | mock lookup | `GET /api/pools/:id` |
-| `getPoolCows(id)` | mock filter | `GET /api/pools/:id/cows` |
-| `getCowById(cowId)` | mock lookup | `GET /api/cows/:cowId` |
+| Function | Planned Endpoint |
+|----------|-----------------|
+| `getPortfolio()` | `GET /api/portfolio` |
+| `getPools()` | `GET /api/pools` |
+| `getPoolById(id)` | `GET /api/pools/:id` |
+| `getPoolCows(id)` | `GET /api/pools/:id/cows` |
+| `getCowById(cowId)` | `GET /api/cows/:cowId` |
 
 Return types are defined in `FrontEnd/src/lib/types.ts`.
