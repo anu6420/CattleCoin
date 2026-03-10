@@ -1,25 +1,17 @@
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
 from typing import Optional, Dict
 
-
 @dataclass
 class AnimalMetrics:
     """
-    Container for per-animal metrics fed into the valuation engine.
+    Per-animal inputs for the valuation engine.
 
-    Attributes:
-        breed_code: Breed code (e.g. 'AN', 'WAG').
-        stage: Lifecycle stage ('ranch', 'backgrounding', 'feedlot', 'processing', 'distribution').
-        is_genomic_enhanced: Whether the animal has genomic-enhanced EPDs on file.
-        percentile_rank: Representative genetic percentile (0-100), typically MARB or composite.
-        current_weight_lbs: Latest observed live weight for this animal, if any.
-        harvest_weight_mid_lbs: Mid-point of the expected harvest weight range for the breed.
-        price_per_lb: Expected live price per pound for this breed.
-        num_cert_programs: Count of active value-add / certification programs for this animal.
+    base_price_usd: Real USDA/AMS market value for this animal at its
+                    current stage (weight × $/cwt). Updated at each
+                    stage transition; scores stay locked.
     """
     breed_code: str
     stage: str
@@ -27,46 +19,43 @@ class AnimalMetrics:
     percentile_rank: Optional[float]
     current_weight_lbs: Optional[float]
     harvest_weight_mid_lbs: float
-    price_per_lb: float
+    base_price_usd: float        # replaces price_per_lb — stage-anchored $/head
     num_cert_programs: int
+    days_on_feed: Optional[float] = None   # for sustainability FCR proxy
+    fcr_score: Optional[float] = None     # feed conversion ratio (lower = better)
+    usrsb_score: Optional[float] = None   # 0-100 USRSB indicator score
 
 
 # Stage → (completion_fraction, years_to_harvest)
 STAGE_COMPLETION = {
-    "ranch": (0.35, 0.75),
+    "ranch":         (0.35, 0.75),
     "backgrounding": (0.55, 0.50),
-    "feedlot": (0.90, 0.25),
-    "processing": (1.00, 0.05),
-    "distribution": (1.00, 0.05),
+    "feedlot":       (0.90, 0.25),
+    "processing":    (1.00, 0.05),
+    "distribution":  (1.00, 0.05),
 }
 
-# Stage → target annual ROI used when backing out listing_price
+# Stage → target annual ROI
 STAGE_TARGET_ROI = {
-    "ranch": 0.18,
+    "ranch":         0.18,
     "backgrounding": 0.16,
-    "feedlot": 0.14,
-    "processing": 0.12,
-    "distribution": 0.12,
+    "feedlot":       0.14,
+    "processing":    0.12,
+    "distribution":  0.12,
 }
 
 
-def _truncated_normal(
-    mean: float,
-    std_dev: float,
-    low: float,
-    high: float,
-    rng: random.Random,
-) -> float:
-    """
-    Sample from a truncated normal N(mean, std_dev^2) clipped to [low, high].
-
-    Simple rejection sampling is sufficient here given narrow ranges and small counts.
-    """
+def _truncated_normal(mean: float, std_dev: float, low: float, high: float,
+                      rng: random.Random) -> float:
     while True:
         x = rng.gauss(mean, std_dev)
         if low <= x <= high:
             return x
 
+
+# ─────────────────────────────────────────────
+# SCORE 1: Genetics → Grade Premium multiplier
+# ─────────────────────────────────────────────
 
 def calculate_genetics_score(
     percentile_rank: Optional[float],
@@ -74,150 +63,195 @@ def calculate_genetics_score(
     rng: Optional[random.Random] = None,
 ) -> float:
     """
-    Compute a genetics score on a 0-100 scale from an EPD-derived percentile.
-
-    Inputs:
-        percentile_rank: Representative percentile (0-100) of the animal's EPD profile.
-                         If None, we assume modestly above-average (p=60).
-        is_genomic_enhanced: Genomic animals receive a small premium.
-
-    Formula (before truncation and noise):
-        p = max(0, min(100, percentile_rank or 60))
-        base = 55 + 0.45 * (p - 50)
-        if genomic: base += 6
-
-    Then:
-        noisy = truncated_normal(base, std=3, low=40, high=99)
-
-    This mapping:
-        - Anchors p=50 near score ~55.
-        - Pushes high-percentile animals into the 70-90+ band.
-        - Ensures even low-percentile animals remain investment-grade (>=40).
+    Genetics score 0-100 from EPD composite percentile.
+    p=50 anchors near 55; genomic +6 pts.
+    Skewed upward — listed animals start at ~60+.
     """
     if rng is None:
         rng = random
-
-    if percentile_rank is None:
-        p = 60.0
-    else:
-        p = max(0.0, min(100.0, percentile_rank))
-
+    p = max(0.0, min(100.0, percentile_rank or 60.0))
     base = 55.0 + 0.45 * (p - 50.0)
     if is_genomic_enhanced:
         base += 6.0
+    return round(_truncated_normal(base, 3.0, 40.0, 99.0, rng), 4)
 
-    noisy = _truncated_normal(base, 3.0, 40.0, 99.0, rng)
-    return round(noisy, 4)
 
+def grade_premium(genetics_score: float) -> float:
+    """
+    GP(G) = 1 + 0.10 × (G − 50) / 50, clipped to [0.95, 1.10].
+    Better EPDs → higher Prime/Choice share → grid value premium.
+    """
+    gp = 1.0 + 0.10 * (genetics_score - 50.0) / 50.0
+    return round(max(0.95, min(1.10, gp)), 6)
+
+
+# ─────────────────────────────────────────────
+# SCORE 2: Health & Weight → QM (health portion)
+# ─────────────────────────────────────────────
 
 def calculate_health_score(
     verified_herd: bool,
-    rng: Optional[random.Random] = None,
-) -> float:
-    """
-    Health score on 0-100.
-
-    Verified herds: center ~92, others ~80, std dev ~4, truncated to [60, 99].
-    This keeps all animals reasonably healthy while rewarding verified herds.
-    """
-    if rng is None:
-        rng = random
-
-    base = 92.0 if verified_herd else 80.0
-    value = _truncated_normal(base, 4.0, 60.0, 99.0, rng)
-    return round(value, 4)
-
-
-def calculate_weight_score(
     current_weight_lbs: Optional[float],
     stage: str,
     harvest_weight_mid_lbs: float,
     rng: Optional[random.Random] = None,
 ) -> float:
     """
-    Weight score on 0-100 based on proximity to stage-adjusted harvest trajectory.
-
-    Let completion_target be the expected fraction of final weight for this stage.
-    completion = current_weight / (completion_target * harvest_weight_mid_lbs),
-    clipped to [0.85, 1.05] to avoid extreme outliers.
-
-    We map completion = 1.0 → score ~65 and apply slope 30 with small noise.
+    Health & Weight score 0-100.
+    60% health component (verified herd status, BQA, treatment history).
+    40% weight component (current weight vs stage benchmark).
+    Professor's note: weight must be included in health score.
     """
     if rng is None:
         rng = random
 
-    completion_target, _years = STAGE_COMPLETION.get(stage, (0.70, 0.50))
+    # 60% health
+    health_base = 92.0 if verified_herd else 78.0
+    health_component = _truncated_normal(health_base, 4.0, 55.0, 99.0, rng)
 
-    if current_weight_lbs is None or harvest_weight_mid_lbs <= 0:
-        completion = 1.03
+    # 40% weight: how close is current weight to stage target?
+    completion_target, _ = STAGE_COMPLETION.get(stage, (0.70, 0.50))
+    if current_weight_lbs and harvest_weight_mid_lbs > 0:
+        ideal = completion_target * harvest_weight_mid_lbs
+        ratio = current_weight_lbs / ideal
+        ratio = max(0.80, min(1.10, ratio))
+        weight_component = 60.0 + 40.0 * (ratio - 1.0) / 0.10
+        weight_component = max(55.0, min(99.0, weight_component))
     else:
-        denom = completion_target * harvest_weight_mid_lbs
-        if denom <= 0:
-            completion = 1.0
-        else:
-            completion = current_weight_lbs / denom
-        completion = max(0.85, min(1.05, completion))
+        weight_component = 72.0   # neutral fallback
 
-    base = 65.0 + 30.0 * (completion - 1.0)
-    value = _truncated_normal(base, 3.0, 55.0, 99.0, rng)
-    return round(value, 4)
+    combined = 0.60 * health_component + 0.40 * weight_component
+    return round(max(40.0, min(99.0, combined)), 4)
 
 
-def calculate_certification_score(
-    num_programs: int,
+# ─────────────────────────────────────────────
+# SCORE 3: Sustainability (two-part)
+# ─────────────────────────────────────────────
+
+def calculate_sustainability_score(
+    days_on_feed: Optional[float],
+    fcr_score: Optional[float],
+    usrsb_score: Optional[float],
+    rng: Optional[random.Random] = None,
 ) -> float:
     """
-    Certification score on 0-100.
+    Sustainability score 0-100, two equal halves:
 
-    Each value-add program contributes 18 points, capped at 100.
+    Planet (50%): feed efficiency + days-to-market proxy.
+        - Fewer days on feed and better FCR → lower lifetime methane.
+        - Reference: Megha et al. MDPI 2025 / USRSB framework.
+
+    USRSB (50%): land, water, animal welfare indicators (0-100 input).
+        - Reference: USRSB standard indicator set.
+
+    If inputs are missing, use conservative defaults.
     """
-    n = max(0, num_programs)
-    score = min(100.0, 18.0 * n)
-    return round(score, 4)
+    if rng is None:
+        rng = random
 
+    # Planet sub-score (0-100): lower DOF and FCR = higher score
+    if days_on_feed is not None:
+        # Benchmark: 160 DOF = good, >220 = poor
+        planet_dof = max(0.0, min(100.0, 100.0 - (days_on_feed - 120.0) / 1.0))
+    else:
+        planet_dof = 65.0
+
+    if fcr_score is not None:
+        # FCR 5.0 = excellent (score 90), 8.0 = poor (score 50)
+        planet_fcr = max(0.0, min(100.0, 90.0 - (fcr_score - 5.0) * 13.3))
+    else:
+        planet_fcr = 65.0
+
+    planet_sub = 0.5 * planet_dof + 0.5 * planet_fcr
+
+    # USRSB sub-score (0-100 direct input)
+    usrsb = usrsb_score if usrsb_score is not None else 65.0
+    usrsb = max(0.0, min(100.0, usrsb))
+
+    combined = 0.50 * planet_sub + 0.50 * usrsb
+    return round(_truncated_normal(combined, 3.0, 40.0, 99.0, rng), 4)
+
+
+def sustainability_multiplier(sustainability_score: float) -> float:
+    """
+    SM(S) = 0.92 + 0.20 × S/100, range [0.92, 1.12].
+    """
+    return round(0.92 + 0.20 * (sustainability_score / 100.0), 6)
+
+
+# ─────────────────────────────────────────────
+# SCORE 4: Certifications
+# ─────────────────────────────────────────────
+
+def calculate_certification_score(num_programs: int) -> float:
+    """
+    +18 pts per verified program (NHTC, GAP, Verified Natural, etc.), cap 100.
+    """
+    return round(min(100.0, 18.0 * max(0, num_programs)), 4)
+
+
+# ─────────────────────────────────────────────
+# COMBINED Quality Multiplier QM(H, C)
+# ─────────────────────────────────────────────
+
+def quality_multiplier(health_score: float, cert_score: float) -> float:
+    """
+    QM(H,C) = 0.95 + 0.20×(H/100) + 0.10×(C/100), clipped [0.90, 1.25].
+    """
+    qm = 0.95 + 0.20 * (health_score / 100.0) + 0.10 * (cert_score / 100.0)
+    return round(max(0.90, min(1.25, qm)), 6)
+
+
+# ─────────────────────────────────────────────
+# MAIN VALUATION: Per-cow value
+# ─────────────────────────────────────────────
 
 def calculate_total_value(
     metrics: AnimalMetrics,
     genetics_score: float,
     health_score: float,
-    weight_score: float,
+    sustainability_score: float,
     cert_score: float,
-    discount_rate: float = 0.10,
+    listing_discount: float = 0.10,
 ) -> float:
     """
-    Compute discounted total value (USD) for a single animal.
+    Per-cow listing value (USD).
 
-    Steps:
-      1) Retrieve completion fraction and years_to_harvest from STAGE_COMPLETION.
-      2) Compute quality uplift factor:
-           u = 1
-               + 0.30 * (genetics_score - 70) / 30
-               + 0.20 * (cert_score / 100)
-         and clamp u to [0.8, 1.6].
-      3) Terminal value:
-           V_terminal = harvest_weight_mid_lbs * price_per_lb * completion * u
-      4) Discount for time value:
-           total_value = V_terminal / (1 + discount_rate)**years_to_harvest
+    Formula:
+        fair_value   = base_price_usd × GP(G) × QM(H,C) × SM(S)
+        listing_value = fair_value × (1 − listing_discount)
+
+    base_price_usd is the real USDA/AMS market value for this
+    weight class at this stage (updated at each stage transition).
+    Scores GP, QM, SM are locked at listing.
     """
-    completion, years_to_harvest = STAGE_COMPLETION.get(
-        metrics.stage, (0.70, 0.50)
-    )
+    gp = grade_premium(genetics_score)
+    qm = quality_multiplier(health_score, cert_score)
+    sm = sustainability_multiplier(sustainability_score)
 
-    uplift = 1.0
-    uplift += 0.30 * ((genetics_score - 70.0) / 30.0)
-    uplift += 0.20 * (cert_score / 100.0)
-    uplift = max(0.8, min(1.6, uplift))
+    fair_value = metrics.base_price_usd * gp * qm * sm
+    listing_value = fair_value * (1.0 - listing_discount)
+    return round(listing_value, 2)
 
-    v_terminal = (
-        metrics.harvest_weight_mid_lbs
-        * metrics.price_per_lb
-        * completion
-        * uplift
-    )
 
-    total_value = v_terminal / ((1.0 + discount_rate) ** years_to_harvest)
-    return round(total_value, 2)
+# ─────────────────────────────────────────────
+# HERD LISTING PRICE
+# ─────────────────────────────────────────────
 
+def derive_listing_price_from_valuations(
+    herd_stage: str,
+    per_cow_values: Dict[str, float],
+) -> float:
+    """
+    Herd listing price = sum of per-cow listing values.
+    (The 10% discount is already baked into calculate_total_value.)
+    """
+    return round(sum(per_cow_values.values()), 2)
+
+
+# ─────────────────────────────────────────────
+# ROI PROJECTION
+# ─────────────────────────────────────────────
 
 def calculate_projected_roi(
     herd_total_discounted_value: float,
@@ -225,42 +259,9 @@ def calculate_projected_roi(
     years_to_harvest: float,
 ) -> float:
     """
-    Compute projected annualized ROI (%) for a herd.
-
-    multiplier = herd_total_discounted_value / listing_price
-    roi_annual = (multiplier ** (1 / years_to_harvest) - 1) * 100
+    Annualized ROI (%) from listing price to terminal value.
     """
     if listing_price <= 0 or herd_total_discounted_value <= 0 or years_to_harvest <= 0:
         return 0.0
-
     multiplier = herd_total_discounted_value / listing_price
-    roi_annual = (multiplier ** (1.0 / years_to_harvest) - 1.0) * 100.0
-    return round(roi_annual, 2)
-
-
-def derive_listing_price_from_valuations(
-    herd_stage: str,
-    per_cow_values: Dict[str, float],
-) -> float:
-    """
-    Compute an economically coherent herd listing price from per-cow discounted values.
-
-    Steps:
-      - Sum per-cow values → total discounted herd value.
-      - Get stage-specific target ROI and years_to_harvest.
-      - Fair listing price:
-            P_fair = V_total / (1 + target_roi)**years
-      - Apply 10% discount: listing_price = 0.9 * P_fair
-    """
-    total_value = sum(per_cow_values.values())
-    _completion, years_to_harvest = STAGE_COMPLETION.get(
-        herd_stage, (0.70, 0.50)
-    )
-    target_roi = STAGE_TARGET_ROI.get(herd_stage, 0.15)
-
-    if years_to_harvest <= 0:
-        years_to_harvest = 0.5
-
-    fair_price = total_value / ((1.0 + target_roi) ** years_to_harvest)
-    listing_price = fair_price * 0.90
-    return round(listing_price, 2)
+    return round((multiplier ** (1.0 / years_to_harvest) - 1.0) * 100.0, 2)
