@@ -7,6 +7,7 @@ import { CowDetail } from "@/pages/CowDetail";
 import { Rancher } from "@/pages/Rancher";
 import { Login } from "@/pages/Login";
 import { SignUp } from "@/pages/SignUp";
+import { Admin } from "@/pages/Admin";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/investor/holdings/:id" element={<PoolDetail />} />
           <Route path="/investor/cows/:cowId" element={<CowDetail />} />
           <Route path="/rancher" element={<Rancher />} />
+          <Route path="/admin" element={<Admin />} />
         </Route>
         <Route path="*" element={<Navigate to="/investor" replace />} />
       </Routes>

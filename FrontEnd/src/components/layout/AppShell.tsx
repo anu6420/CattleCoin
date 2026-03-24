@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Warehouse, User } from "lucide-react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { LayoutDashboard, Settings, User, Warehouse } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -7,9 +7,17 @@ const NAV_ITEMS = [
   { to: "/investor", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/investor/holdings", label: "Lots", icon: Warehouse, end: false },
   { to: "/rancher", label: "Rancher", icon: User, end: false },
+  { to: "/admin", label: "Admin", icon: Settings, end: false },
 ] as const;
 
 export function AppShell() {
+  const location = useLocation();
+  const sectionLabel = location.pathname.startsWith("/admin")
+    ? "Administrator Portal"
+    : location.pathname.startsWith("/rancher")
+      ? "Rancher Portal"
+      : "Investor Portal";
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -51,7 +59,7 @@ export function AppShell() {
         <header className="flex h-14 shrink-0 items-center border-b border-border bg-background px-6">
           <h1 className="text-sm font-semibold md:hidden">CattleToken</h1>
           <div className="ml-auto flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">Investor Portal</span>
+            <span className="text-xs text-muted-foreground">{sectionLabel}</span>
           </div>
         </header>
 
