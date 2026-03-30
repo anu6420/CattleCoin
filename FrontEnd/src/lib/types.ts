@@ -63,6 +63,10 @@ export type Pool = {
   dominantStage: Stage;
   verified: boolean;           // aggregate of CowHealth.verified_flag
   lastUpdateIso: string;
+
+  tokensSold?: number;
+  tokensRemaining?: number;
+  riskScore?: number | null;
 };
 
 // ── Cow (maps to backend Cow table + joined data) ────────────────────────────
@@ -220,4 +224,38 @@ export type PortfolioSummary = {
   history30d: SeriesPoint[];
   recentEvents: LifecycleEvent[];
   topPools: Pool[];
+};
+
+// ── Invest Types ─────────────────────────────────────────────────────────────
+
+export type HerdInvestInfo = {
+  herdId: string;
+  herdName: string;
+  purchaseStatus: PurchaseStatus;
+  listingPrice: number;
+  dominantStage: Stage;
+  breedCode: string;
+  riskScore: number | null;
+  totalSupply: number;
+  tokensSold: number;
+  tokensAvailable: number;
+  pricePerToken: number;
+  contractAddress: string;
+  isAvailable: boolean;
+};
+
+export type InvestPayload = {
+  herdId: string;
+  investorSlug: string;
+  tokensToBuy: number;
+  walletAddress?: string;
+  fullName?: string;
+  email?: string;
+};
+
+export type InvestResult = {
+  success: boolean;
+  message: string;
+  tokensRemaining: number;
+  newStatus: string;
 };
