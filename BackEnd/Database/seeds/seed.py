@@ -861,13 +861,29 @@ def gen_ownership(users: list[User], herds: list[Herd]) -> list[str]:
     for h in herds:
         total = h.head_count * 1000
         pool_sq = pool_subq(h.herd_id)
-        n_inv = random.randint(1, min(3, len(investors)))
-        selected = random.sample(investors, n_inv)
-        if n_inv == 1:
-            splits = [total]
+
+        if h.purchase_status == "sold":
+            sold_pct = 1.0
+        elif h.purchase_status == "pending":
+            sold_pct = round(random.uniform(0.30, 0.50), 2)
         else:
-            cuts = sorted(random.sample(range(1, total), n_inv - 1))
-            splits = [cuts[0]] + [cuts[i] - cuts[i-1] for i in range(1, len(cuts))] + [total - cuts[-1]]
+            sold_pct = round(random.uniform(0.20, 0.60), 2)
+
+        tokens_to_assign = max(1, int(total * sold_pct))
+
+        # Cap n_inv so we always have enough tokens to split
+        max_inv = min(3, len(investors), tokens_to_assign)
+        n_inv = random.randint(1, max(1, max_inv))
+        selected = random.sample(investors, n_inv)
+
+        if n_inv == 1 or tokens_to_assign < n_inv:
+            # Give everything to one investor if we can't safely split
+            splits = [tokens_to_assign]
+            selected = selected[:1]
+        else:
+            cuts = sorted(random.sample(range(1, tokens_to_assign), n_inv - 1))
+            splits = [cuts[0]] + [cuts[i] - cuts[i-1] for i in range(1, len(cuts))] + [tokens_to_assign - cuts[-1]]
+
         for inv, amount in zip(selected, splits):
             if amount < 1:
                 continue
@@ -887,19 +903,30 @@ def gen_transactions(users: list[User], herds: list[Herd]) -> list[str]:
     for h in herds:
         total = float(h.head_count * 1000)
         pool_sq = pool_subq(h.herd_id)
+
         out.append(
             "INSERT INTO transactions (user_id, pool_id, type, amount, status, blockchain_tx_hash) "
             f"VALUES ({q(admin.user_id)}, {pool_sq}, 'mint'::transaction_type, "
             f"{total}, 'confirmed', NULL);"
         )
+
+        if h.purchase_status == "sold":
+            buy_pct = 1.0
+        elif h.purchase_status == "pending":
+            buy_pct = round(random.uniform(0.30, 0.50), 2)
+        else:
+            buy_pct = round(random.uniform(0.20, 0.60), 2)
+
         for _ in range(random.randint(1, 3)):
             inv = random.choice(investors)
-            amount = round(random.uniform(total * 0.05, total * 0.30), 6)
+            amount = round(random.uniform(total * 0.05, total * buy_pct * 0.5), 6)
+            amount = max(1.0, amount)
             out.append(
                 "INSERT INTO transactions (user_id, pool_id, type, amount, status, blockchain_tx_hash) "
                 f"VALUES ({q(inv.user_id)}, {pool_sq}, 'buy'::transaction_type, "
                 f"{amount}, 'confirmed', NULL);"
             )
+
         if h.purchase_status == "sold":
             inv = random.choice(investors)
             out.append(
@@ -907,7 +934,9 @@ def gen_transactions(users: list[User], herds: list[Herd]) -> list[str]:
                 f"VALUES ({q(inv.user_id)}, {pool_sq}, 'redeem'::transaction_type, "
                 f"{total}, 'confirmed', NULL);"
             )
+
     return out
+
 
 
 # ---------------------------------------------------------------------------

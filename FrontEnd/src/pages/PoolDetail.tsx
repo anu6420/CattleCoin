@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronRight, FileText, ShieldCheck, ClipboardList, ArrowLeftRight, Award, Shield, PlusCircle, ExternalLink } from "lucide-react";
+import {
+  ChevronRight, FileText, ShieldCheck, ClipboardList,
+  ArrowLeftRight, Award, Shield, PlusCircle, ExternalLink, TrendingUp,
+} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { KpiCard, KpiCardSkeleton } from "@/components/common/KpiCard";
 import { StageBadge } from "@/components/common/StageBadge";
 import { VerifiedBadge } from "@/components/common/VerifiedBadge";
@@ -14,11 +18,10 @@ import { PipelineBar } from "@/components/pool/PipelineBar";
 import { BudgetBreakdown } from "@/components/pool/BudgetBreakdown";
 import { CowsTable, CowsTableSkeleton } from "@/components/tables/CowsTable";
 import { getPoolById, getPoolCows } from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
 import type { PoolDetail as PoolDetailType, Cow, Document, PurchaseStatus } from "@/lib/types";
 import { formatUsd, formatNumber } from "@/lib/utils";
 
-const DOC_ICONS: Record<Document["type"], typeof FileText> = {
+const DOC_ICONS: Record<string, React.ElementType> = {
   certificate: Award,
   inspection: ClipboardList,
   transfer: ArrowLeftRight,
@@ -29,8 +32,8 @@ const DOC_ICONS: Record<Document["type"], typeof FileText> = {
 
 const STATUS_STYLES: Record<PurchaseStatus, string> = {
   available: "bg-green-50 text-green-700 border-green-200",
-  pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  sold: "bg-slate-50 text-slate-600 border-slate-200",
+  pending:   "bg-yellow-50 text-yellow-700 border-yellow-200",
+  sold:      "bg-slate-50 text-slate-600 border-slate-200",
 };
 
 function abbreviateAddress(addr: string): string {
@@ -57,11 +60,8 @@ export function PoolDetail() {
 
     getPoolById(id)
       .then((result) => {
-        if (!result) {
-          setNotFound(true);
-        } else {
-          setData(result);
-        }
+        if (!result) setNotFound(true);
+        else setData(result);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -74,272 +74,193 @@ export function PoolDetail() {
 
   if (notFound) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg font-semibold">Herd not found</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          No herd with ID &ldquo;{id}&rdquo; exists.
-        </p>
-        <Link
-          to="/investor/holdings"
-          className="mt-4 text-sm text-primary hover:underline"
-        >
-          Back to Holdings
-        </Link>
+      <div className="p-8 text-center space-y-3">
+        <h2 className="text-lg font-semibold">Herd not found</h2>
+        <p className="text-slate-500">No herd with ID "{id}" exists.</p>
+        <Link to=".."><Button variant="outline">Back to Holdings</Button></Link>
       </div>
     );
   }
 
+  // Derived availability
+  const tokensRemaining = data
+    ? (data.pool as any).tokensRemaining ?? (data.pool.totalSupply - ((data.pool as any).tokensSold ?? 0))
+    : 0;
+  const isAvailable =
+    !loading &&
+    data?.pool.purchaseStatus !== "sold" &&
+    tokensRemaining > 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/investor/holdings" className="hover:text-foreground">
-          Holdings
-        </Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">
-          {loading ? (
-            <Skeleton className="inline-block h-4 w-24" />
-          ) : (
-            data?.pool.name
-          )}
-        </span>
+      <nav className="flex items-center gap-1 text-sm text-slate-500">
+        <Link to=".." className="hover:underline">Holdings</Link>
+        <ChevronRight className="h-3.5 w-3.5" />
+        {loading ? <Skeleton className="h-4 w-24" /> : <span>{data?.pool.name}</span>}
       </nav>
 
-      {/* Title */}
+      {/* Title row */}
       {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-60" />
-          <Skeleton className="h-4 w-32" />
-        </div>
+        <Skeleton className="h-8 w-64" />
       ) : data ? (
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-2xl font-bold">{data.pool.name}</h2>
-            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200">
-              Lot
-            </Badge>
-            <Badge variant="outline" className={STATUS_STYLES[data.pool.purchaseStatus]}>
-              {data.pool.purchaseStatus.charAt(0).toUpperCase() + data.pool.purchaseStatus.slice(1)}
-            </Badge>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold">{data.pool.name}</h1>
+              <Badge variant="outline">Lot</Badge>
+              <Badge
+                variant="outline"
+                className={STATUS_STYLES[data.pool.purchaseStatus]}
+              >
+                {data.pool.purchaseStatus.charAt(0).toUpperCase() + data.pool.purchaseStatus.slice(1)}
+              </Badge>
+              {data.pool.cohortLabel && (
+                <Badge variant="secondary">{data.pool.cohortLabel}</Badge>
+              )}
+              <Badge variant="secondary">{data.pool.geneticsLabel}</Badge>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Contract:</span>
+              <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">
+                {abbreviateAddress(data.pool.contractAddress)}
+              </code>
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-sm text-muted-foreground font-mono">{data.pool.herdId}</span>
-            {data.pool.cohortLabel && (
-              <>
-                <Separator orientation="vertical" className="h-3" />
-                <span className="text-sm text-muted-foreground">
-                  {data.pool.cohortLabel}
-                </span>
-              </>
-            )}
-            <Separator orientation="vertical" className="h-3" />
-            <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-              {data.pool.geneticsLabel}
-            </span>
-            <StageBadge stage={data.pool.dominantStage} />
-            <VerifiedBadge verified={data.pool.verified} showLabel />
-          </div>
-          {/* Contract address */}
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <span className="text-xs text-muted-foreground">Contract:</span>
-            <span className="font-mono text-xs text-muted-foreground">
-              {abbreviateAddress(data.pool.contractAddress)}
-            </span>
-            <ExternalLink className="h-3 w-3 text-muted-foreground" />
-          </div>
+
+          {/* ── Invest Button — only when tokens remain ── */}
+          {isAvailable && (
+            <Link to={`/invest/${data.pool.herdId}`}>
+              <Button className="bg-green-600 hover:bg-green-700 text-white gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Invest in This Herd
+              </Button>
+            </Link>
+          )}
         </div>
       ) : null}
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {loading ? (
-          <>
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-            <KpiCardSkeleton />
-          </>
+          <><KpiCardSkeleton /><KpiCardSkeleton /><KpiCardSkeleton /><KpiCardSkeleton /></>
         ) : data ? (
           <>
             <KpiCard
-              title="Tokens Held (ERC-20)"
-              value={formatNumber(data.pool.tokenAmount)}
-              subtitle={`of ${formatNumber(data.pool.totalSupply)} total supply`}
+              label="Position Value"
+              value={formatUsd(data.pool.positionValueUsd)}
             />
             <KpiCard
-              title="Lot Size"
-              value={`${data.pool.backingHerdCount} head`}
-            />
-            <KpiCard
-              title="Listing Price"
-              value={formatUsd(data.pool.listingPrice)}
-            />
-            <KpiCard
-              title="Net Expected"
-              value={formatUsd(data.pool.netExpectedUsd)}
+              label="Expected Revenue"
+              value={formatUsd(data.pool.expectedRevenueUsd)}
+              delta={data.pool.netExpectedUsd}
               trend={data.pool.netExpectedUsd >= 0 ? "up" : "down"}
-              subtitle={
-                data.pool.netExpectedUsd >= 0 ? "profitable" : "at risk"
-              }
+              subtitle={data.pool.netExpectedUsd >= 0 ? "profitable" : "at risk"}
+            />
+            <KpiCard
+              label="Tokens Available"
+              value={`${formatNumber(tokensRemaining)} / ${formatNumber(data.pool.totalSupply)}`}
+              subtitle="remaining to purchase"
+            />
+            <KpiCard
+              label="Risk Score"
+              value={(data.pool as any).riskScore != null ? String((data.pool as any).riskScore) : "–"}
+              subtitle="0 = low · 100 = high"
             />
           </>
         ) : null}
       </div>
 
-      {/* Two column: Pipeline + Supply Chain | Budget + Chart */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left column */}
+      {/* Two column: Pipeline + Stepper | Budget + Chart */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Left */}
         <div className="space-y-6">
-          {/* Supply Chain Pipeline */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">
-                Supply Chain Pipeline
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Supply Chain Pipeline</CardTitle></CardHeader>
             <CardContent>
-              {loading ? (
-                <Skeleton className="h-16 w-full" />
-              ) : data ? (
+              {loading ? <Skeleton className="h-8 w-full" /> : data ? (
                 <PipelineBar breakdown={data.pool.stageBreakdown} />
               ) : null}
             </CardContent>
           </Card>
-
-          {/* Supply Chain Stepper */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">
-                Lifecycle Progress
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Lifecycle Progress</CardTitle></CardHeader>
             <CardContent>
               {loading ? (
-                <div className="space-y-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="flex gap-3">
-                      <Skeleton className="h-8 w-8 rounded-full" />
-                      <div className="space-y-1">
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-3 w-40" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : data ? (
-                <SupplyChainStepper
-                  currentStage={data.pool.dominantStage}
-                  events={data.lifecycle}
-                />
+                <SupplyChainStepper events={data.lifecycle} currentStage={data.pool.dominantStage} />
               ) : null}
             </CardContent>
           </Card>
         </div>
 
-        {/* Right column */}
+        {/* Right */}
         <div className="space-y-6">
-          {/* Budget Breakdown */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">
-                Budget Breakdown
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Budget Breakdown</CardTitle></CardHeader>
             <CardContent>
               {loading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 w-full" />
-                  ))}
-                </div>
+                <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : data ? (
                 <BudgetBreakdown items={data.budgetBreakdown} />
               ) : null}
             </CardContent>
           </Card>
-
-          {/* Pool Value Chart */}
-          {loading ? (
-            <LineChartCardSkeleton height={240} />
-          ) : data ? (
+          {loading ? <LineChartCardSkeleton /> : data ? (
             <LineChartCard
-              title="Position Value (30 days)"
-              data={data.valuationHistory30d}
-              height={240}
+              title="Lot Value (30 days)"
+              series={data.valuationHistory30d}
+              valuePrefix="$"
             />
           ) : null}
         </div>
       </div>
 
-      {/* Documents — compact horizontal strip */}
-      {loading ? (
+      {/* Documents */}
+      {!loading && data && data.documents.length > 0 && (
         <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-8 w-40" />
-              <Skeleton className="h-8 w-36" />
-              <Skeleton className="h-8 w-44" />
-            </div>
+          <CardHeader><CardTitle className="text-base">Docs</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {data.documents.map((doc) => {
+              const Icon = DOC_ICONS[doc.type] ?? FileText;
+              return (
+                <a
+                  key={doc.title}
+                  href={doc.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
+                >
+                  <Icon className="h-4 w-4" />
+                  {doc.title}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              );
+            })}
           </CardContent>
         </Card>
-      ) : data && data.documents.length > 0 ? (
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center gap-3 overflow-x-auto">
-              <span className="shrink-0 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Docs
-              </span>
-              <Separator orientation="vertical" className="h-5" />
-              {data.documents.map((doc) => {
-                const Icon = DOC_ICONS[doc.type] ?? FileText;
-                return (
-                  <a
-                    key={doc.title}
-                    href={doc.url}
-                    className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {doc.title}
-                  </a>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
+      )}
 
-      {/* Cattle Records Table */}
+      {/* Cattle Records */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-medium">
-              Individual Cattle Records ({cowsLoading ? "..." : cows.length} head)
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              disabled
-              title="Add cattle — coming soon"
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Add Cattle
-            </Button>
-          </div>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">
+            Individual Cattle Records ({cowsLoading ? "…" : cows.length} head)
+          </CardTitle>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <PlusCircle className="h-4 w-4" /> Add Cattle
+          </Button>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {cowsLoading ? (
-            <CowsTableSkeleton rows={6} />
+            <CowsTableSkeleton />
           ) : cows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="p-6 text-center text-slate-500 text-sm">
               No cattle records found for this lot.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <CowsTable cows={cows} onRemove={handleRemoveCow} />
-            </div>
+            <CowsTable cows={cows} onRemove={handleRemoveCow} />
           )}
         </CardContent>
       </Card>

@@ -1,101 +1,87 @@
-import type { Pool, Cow, CowDetailData, PoolDetail, PortfolioSummary } from "./types";
-import {
-  POOLS,
-  COWS,
-  buildPoolBudget,
-  buildPoolHistory,
-  buildPortfolioHistory,
-  getRecentEvents,
-  getPoolEvents,
-  getPoolCows as getPoolCowsMock,
-  getPoolDocuments,
-  getCowWeights,
-  getCowEPDs,
-  getCowHealthRecords,
-  getCowValuations,
-} from "./mock";
+import type {
+  Pool,
+  Cow,
+  CowDetailData,
+  PoolDetail,
+  PortfolioSummary,
+  HerdInvestInfo,
+  InvestPayload,
+  InvestResult,
+} from "./types";
 
-// Simulates network latency for realistic loading states.
-function delay(ms = 400): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const API_BASE = "/api";
+
+async function fetchJSON<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${path} → ${res.status}: ${body}`);
+  }
+  return res.json() as Promise<T>;
 }
 
-// TODO: replace with fetch('/api/portfolio')
+// ─── Portfolio (global, used by Admin) ───────────────────────────────────────
 export async function getPortfolio(): Promise<PortfolioSummary> {
-  await delay();
-
-  const portfolioValueUsd = POOLS.reduce((s, p) => s + p.positionValueUsd, 0);
-  const avgRisk = Math.round(
-    POOLS.reduce((s, p) => s + (p.netExpectedUsd / p.listingPrice) * 100, 0) /
-      POOLS.length,
-  );
-
-  const topPools = [...POOLS]
-    .sort((a, b) => b.positionValueUsd - a.positionValueUsd)
-    .slice(0, 5);
-
-  return {
-    asOfIso: new Date().toISOString(),
-    portfolioValueUsd,
-    change30dPct: 4.2,
-    poolsHeld: POOLS.length,
-    avgRisk,
-    history30d: buildPortfolioHistory(),
-    recentEvents: getRecentEvents(8),
-    topPools,
-  };
+  return fetchJSON("/portfolio");
 }
 
-// TODO: replace with fetch('/api/pools')
+// ─── Per-investor portfolio (Dashboard) ──────────────────────────────────────
+export async function getInvestorPortfolio(slug: string): Promise<PortfolioSummary> {
+  return fetchJSON(`/investors/${slug}/portfolio`);
+}
+
+// ─── Per-investor holdings (Holdings page) ────────────────────────────────────
+export async function getInvestorHoldings(slug: string): Promise<Pool[]> {
+  return fetchJSON(`/investors/${slug}/holdings`);
+}
+
+// ─── Pools / Herds ────────────────────────────────────────────────────────────
 export async function getPools(): Promise<Pool[]> {
-  await delay();
-  return [...POOLS];
+  return fetchJSON("/pools");
 }
 
-// fetch('/api/pools')
-// export async function getPools(): Promise<Pool[]> {
-//   const res = await fetch(`${API_BASE}/pools`);
-
-//   if (!res.ok) {
-//     throw new Error("Failed to fetch pools");
-//   }
-
-//   return res.json();
-// }
-
-// TODO: replace with fetch(`/api/pools/${poolId}`)
 export async function getPoolById(poolId: string): Promise<PoolDetail | null> {
-  await delay(500);
-  const pool = POOLS.find((p) => p.id === poolId);
-  if (!pool) return null;
-
-  return {
-    pool,
-    lifecycle: getPoolEvents(poolId),
-    budgetBreakdown: buildPoolBudget(poolId),
-    valuationHistory30d: buildPoolHistory(pool),
-    documents: getPoolDocuments(pool),
-  };
+  try {
+    return await fetchJSON(`/pools/${poolId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
 }
 
-// TODO: replace with fetch(`/api/pools/${poolId}/cows`)
 export async function getPoolCows(poolId: string): Promise<Cow[]> {
-  await delay(300);
-  return getPoolCowsMock(poolId);
+  return fetchJSON(`/pools/${poolId}/cows`);
 }
 
-// TODO: replace with fetch(`/api/cows/${cowId}`)
-// Returns full CowDetailData including weights, EPDs, health records, and valuations.
+// ─── Individual Cow ───────────────────────────────────────────────────────────
 export async function getCowById(cowId: string): Promise<CowDetailData | null> {
-  await delay(300);
-  const cow = COWS.find((c) => c.cowId === cowId);
-  if (!cow) return null;
+  try {
+    return await fetchJSON(`/cows/${cowId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
+}
 
-  return {
-    cow,
-    weights: getCowWeights(cowId),
-    epds: getCowEPDs(cowId),
-    healthRecords: getCowHealthRecords(cowId),
-    valuations: getCowValuations(cowId),
-  };
+// ─── Invest ───────────────────────────────────────────────────────────────────
+export async function getHerdForInvest(herdId: string): Promise<HerdInvestInfo | null> {
+  try {
+    return await fetchJSON(`/invest/${herdId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
+}
+
+export async function postInvestment(payload: InvestPayload): Promise<InvestResult> {
+  const res = await fetch(`${API_BASE}/invest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(body || `Investment failed: ${res.status}`);
+  }
+  return res.json() as Promise<InvestResult>;
 }
