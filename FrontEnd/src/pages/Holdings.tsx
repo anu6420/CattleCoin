@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PoolsTable, PoolsTableSkeleton } from "@/components/tables/PoolsTable";
 import type { PoolSortKey } from "@/components/tables/PoolsTable";
-import { getInvestorHoldings } from "@/lib/api";
+import { getPools } from "@/lib/api";
 import { STAGES } from "@/lib/types";
 import type { Pool } from "@/lib/types";
 
@@ -28,13 +28,13 @@ export function Holdings() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    if (!slug) return;
     setLoading(true);
-    getInvestorHoldings(slug)
+    // Fetch all herds so investor can browse the full marketplace
+    getPools()
       .then(setPools)
       .catch(() => setError("Failed to load lots."))
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, []);
 
   function handleSort(key: PoolSortKey) {
     if (key === sortKey) {
@@ -72,8 +72,20 @@ export function Holdings() {
   }
 
   return (
-    <div className="space-y-4 p-6">
-      <h1 className="text-2xl font-bold tracking-tight">My Lots</h1>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">All Lots</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Browse all available herds — click any to view details or invest
+          </p>
+        </div>
+        {!loading && (
+          <span className="text-sm text-muted-foreground">
+            {filtered.length} of {pools.length} lots
+          </span>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -126,11 +138,13 @@ export function Holdings() {
           </Button>
         </div>
       ) : (
+        // Pass slug so PoolsTable navigates to /investor/:slug/holdings/:id
         <PoolsTable
           pools={filtered}
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
+          slug={slug}
         />
       )}
     </div>

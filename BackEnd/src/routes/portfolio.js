@@ -12,7 +12,7 @@ const BREED_LABEL = {
 // ─── GET /api/portfolio ───────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
-    const allStages = ["RANCH", "AUCTION", "BACKGROUNDING", "FEEDLOT", "PROCESSING", "DISTRIBUTION"];
+    const allStages = ["RANCH", "BACKGROUNDING", "FEEDLOT", "PROCESSING", "DISTRIBUTION"];
 
     // Check if ownership records exist
     const ownershipCheck = await pool.query("SELECT COUNT(*) FROM ownership");

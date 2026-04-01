@@ -9,7 +9,7 @@ const BREED_LABEL = {
   SM: "Simmental Registered AI", RA: "Red Angus AI Elite",
 };
 
-const ALL_STAGES = ["RANCH","AUCTION","BACKGROUNDING","FEEDLOT","PROCESSING","DISTRIBUTION"];
+const ALL_STAGES = ["RANCH","BACKGROUNDING","FEEDLOT","PROCESSING","DISTRIBUTION"];
 
 // ─── GET /api/investors/:slug/portfolio ───────────────────────────────────────
 // Returns the Dashboard data scoped to a single investor (by slug, e.g. "investor2")
