@@ -1,22 +1,27 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useParams, useMatch } from "react-router-dom";
 import { LayoutDashboard, Settings, User, Warehouse } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { to: "/investor", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/investor/holdings", label: "Lots", icon: Warehouse, end: false },
-  { to: "/rancher", label: "Rancher", icon: User, end: false },
-  { to: "/admin", label: "Admin", icon: Settings, end: false },
-] as const;
-
 export function AppShell() {
   const location = useLocation();
+
+  // Extract investor slug from any /investor/:slug/* route
+  const investorMatch = useMatch("/investor/:slug/*");
+  const slug = investorMatch?.params?.slug ?? "investor1";
+
   const sectionLabel = location.pathname.startsWith("/admin")
     ? "Administrator Portal"
     : location.pathname.startsWith("/rancher")
       ? "Rancher Portal"
-      : "Investor Portal";
+      : `Investor Portal — ${slug.replace("investor", "Investor ")}`;
+
+  const NAV_ITEMS = [
+    { to: `/investor/${slug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, end: true },
+    { to: `/investor/${slug}/holdings`, label: "Lots", icon: Warehouse, end: false },
+    { to: "/rancher", label: "Rancher", icon: User, end: false },
+    { to: "/admin", label: "Admin", icon: Settings, end: false },
+  ] as const;
 
   return (
     <div className="flex h-screen overflow-hidden">

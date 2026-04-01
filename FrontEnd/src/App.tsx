@@ -24,13 +24,27 @@ export default function App() {
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/investor/investor1/dashboard" replace />} />
 
-        {/* Investor routes — scoped per slug */}
+        {/* Legacy redirect — old /investor path goes to investor1 dashboard */}
+        <Route path="/investor" element={<Navigate to="/investor/investor1/dashboard" replace />} />
+
+        {/* All investor routes — scoped per slug */}
         <Route element={<AppShell />}>
+          {/* Dashboard */}
           <Route path="/investor/:slug/dashboard" element={<InvestorDashboard />} />
+
+          {/* Holdings / marketplace — all herds listed */}
           <Route path="/investor/:slug/holdings" element={<Holdings />} />
-          <Route path="/investor/holdings/:id" element={<PoolDetail />} />
-          <Route path="/investor/cow/:cowId" element={<CowDetail />} />
+
+          {/* Herd detail — investor-specific view */}
+          <Route path="/investor/:slug/holdings/:id" element={<PoolDetail />} />
+
+          {/* Cow detail */}
+          <Route path="/investor/:slug/cow/:cowId" element={<CowDetail />} />
+
+          {/* Invest page */}
           <Route path="/invest/:herdId" element={<InvestPage />} />
+
+          {/* Non-investor portals */}
           <Route path="/rancher" element={<Rancher />} />
           <Route path="/admin" element={<Admin />} />
         </Route>

@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowUpDown } from "lucide-react";
 import {
   Table,
@@ -28,6 +28,8 @@ interface PoolsTableProps {
   sortDir: "asc" | "desc";
   onSort: (key: PoolSortKey) => void;
   compact?: boolean;
+  /** Investor slug — used to build the correct /investor/:slug/holdings/:id URL */
+  slug?: string;
 }
 
 export function PoolsTable({
@@ -36,8 +38,12 @@ export function PoolsTable({
   sortDir,
   onSort,
   compact = false,
+  slug,
 }: PoolsTableProps) {
   const navigate = useNavigate();
+  // Try to get slug from URL params if not passed directly
+  const params = useParams<{ slug?: string }>();
+  const resolvedSlug = slug ?? params.slug ?? "investor1";
 
   const sorted = [...pools].sort((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;
@@ -114,7 +120,7 @@ export function PoolsTable({
           <TableRow
             key={p.id}
             className="cursor-pointer"
-            onClick={() => navigate(`/investor/holdings/${p.id}`)}
+            onClick={() => navigate(`/investor/${resolvedSlug}/holdings/${p.id}`)}
           >
             <TableCell>
               <div>
