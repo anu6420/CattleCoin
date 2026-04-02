@@ -8,6 +8,8 @@ import portfolioRoutes from "./routes/portfolio.js";
 import investorsRoutes from "./routes/investors.js";
 import investRoutes from "./routes/invest.js";
 import feedlotsRoutes from "./routes/feedlots.js";
+import authRoutes from "./routes/auth.js";
+import usersRoutes from "./routes/users.js";
 
 dotenv.config();
 
@@ -23,6 +25,8 @@ app.use("/api/portfolio", portfolioRoutes);
 app.use("/api/investors", investorsRoutes); // per-investor dashboard + holdings
 app.use("/api/invest",    investRoutes);    // POST buy-tokens form
 app.use("/api/feedlot",  feedlotsRoutes);  // feedlot claim + dashboard
+app.use("/api/auth",     authRoutes);      // login
+app.use("/api/users",    usersRoutes);     // user list by role
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", async (req, res) => {

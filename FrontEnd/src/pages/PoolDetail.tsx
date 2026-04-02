@@ -41,7 +41,7 @@ function abbreviateAddress(addr: string): string {
 export function PoolDetail() {
   // Route: /investor/:slug/holdings/:id
   const { slug, id } = useParams<{ slug: string; id: string }>();
-  const resolvedSlug = slug ?? "investor1";
+  const resolvedSlug = slug ?? "";
 
   const [data, setData] = useState<PoolDetailType | null>(null);
   const [cows, setCows] = useState<Cow[]>([]);

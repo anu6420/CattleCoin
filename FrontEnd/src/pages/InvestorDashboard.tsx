@@ -15,7 +15,7 @@ import { formatUsd, formatPct, formatDateTime } from "@/lib/utils";
 
 export function InvestorDashboard() {
   const { slug } = useParams<{ slug: string }>();
-  const resolvedSlug = slug ?? "investor1";
+  const resolvedSlug = slug ?? "";
 
   const [data, setData] = useState<PortfolioSummary | null>(null);
   const [holdings, setHoldings] = useState<Pool[]>([]);
@@ -164,7 +164,7 @@ export function InvestorDashboard() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <StageBadge stage={ev.stage} />
-                    {ev.verified && <VerifiedBadge />}
+                    {ev.verified && <VerifiedBadge verified={true} />}
                     <span className="text-xs text-slate-400">
                       {formatDateTime(ev.timestampIso)}
                     </span>

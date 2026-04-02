@@ -90,6 +90,34 @@ export async function postInvestment(payload: InvestPayload): Promise<InvestResu
   return res.json() as Promise<InvestResult>;
 }
 
+// ─── Auth ────────────────────────────────────────────────────────────────────
+import type { CurrentUser } from "@/context/AuthContext";
+
+export async function postLogin(username: string, password: string): Promise<CurrentUser> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "Login failed" }));
+    throw new Error(body.error ?? "Login failed");
+  }
+  return res.json() as Promise<CurrentUser>;
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+export type UserSummary = {
+  userId: string;
+  slug:   string;
+  role:   string;
+  email:  string;
+};
+
+export async function getUsersByRole(role: string): Promise<UserSummary[]> {
+  return fetchJSON(`/users?role=${encodeURIComponent(role)}`);
+}
+
 // ─── Feedlot ─────────────────────────────────────────────────────────────────
 
 /** Herds that ranchers listed but no feedlot has claimed yet */
