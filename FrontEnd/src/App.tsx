@@ -9,6 +9,7 @@ import { Login } from "@/pages/Login";
 import { SignUp } from "@/pages/SignUp";
 import { Admin } from "@/pages/Admin";
 import { InvestPage } from "@/pages/InvestPage";
+import { FeedlotPage } from "@/pages/FeedlotPage";
 
 export default function App() {
   return (
@@ -46,6 +47,7 @@ export default function App() {
 
           {/* Non-investor portals */}
           <Route path="/rancher" element={<Rancher />} />
+          <Route path="/feedlot" element={<FeedlotPage />} />
           <Route path="/admin" element={<Admin />} />
         </Route>
 

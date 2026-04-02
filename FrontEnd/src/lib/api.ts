@@ -7,6 +7,10 @@ import type {
   HerdInvestInfo,
   InvestPayload,
   InvestResult,
+  FeedlotHerd,
+  FeedlotDashboard,
+  FeedlotClaimPayload,
+  FeedlotClaimResult,
 } from "./types";
 
 const API_BASE = "/api";
@@ -84,4 +88,30 @@ export async function postInvestment(payload: InvestPayload): Promise<InvestResu
     throw new Error(body || `Investment failed: ${res.status}`);
   }
   return res.json() as Promise<InvestResult>;
+}
+
+// ─── Feedlot ─────────────────────────────────────────────────────────────────
+
+/** Herds that ranchers listed but no feedlot has claimed yet */
+export async function getFeedlotPendingHerds(): Promise<FeedlotHerd[]> {
+  return fetchJSON("/feedlot/pending");
+}
+
+/** Herds claimed by this feedlot (listed/sold) */
+export async function getFeedlotDashboard(slug: string): Promise<FeedlotDashboard> {
+  return fetchJSON(`/feedlot/${slug}/dashboard`);
+}
+
+/** Feedlot claims a pending herd and sets investor percentage */
+export async function postFeedlotClaim(payload: FeedlotClaimPayload): Promise<FeedlotClaimResult> {
+  const res = await fetch(`${API_BASE}/feedlot/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(body || `Claim failed: ${res.status}`);
+  }
+  return res.json() as Promise<FeedlotClaimResult>;
 }

@@ -11,20 +11,24 @@ router.get("/:herdId", async (req, res) => {
       SELECT
         h.herd_id, h.herd_name, h.listing_price, h.purchase_status,
         h.head_count, h.verified_flag, h.dominant_stage, h.breed_code,
-        h.risk_score, h.tokens_sold,
+        h.risk_score, h.tokens_sold, h.investor_pct, h.feedlot_status,
         tp.total_supply, tp.contract_address
       FROM herds h
       JOIN token_pools tp ON tp.herd_id = h.herd_id
-      WHERE h.herd_id = $1
+      WHERE h.herd_id = $1 AND h.feedlot_status = 'listed'
     `, [herdId]);
 
-    if (result.rows.length === 0) return res.status(404).json({ error: "Herd not found" });
+    if (result.rows.length === 0) return res.status(404).json({ error: "Herd not found or not yet available to investors" });
     const r = result.rows[0];
 
     const totalSupply = parseInt(r.total_supply, 10) || 0;
-    const tokensSold  = parseInt(r.tokens_sold, 10)  || 0;
-    const tokensAvailable = Math.max(0, totalSupply - tokensSold);
-    const pricePerToken = totalSupply > 0
+    const investorPct = r.investor_pct != null ? parseFloat(r.investor_pct) : null;
+    const investorAllocation = investorPct != null
+      ? Math.floor(totalSupply * investorPct / 100)
+      : totalSupply;
+    const tokensSold      = parseInt(r.tokens_sold, 10) || 0;
+    const tokensAvailable = Math.max(0, investorAllocation - tokensSold);
+    const pricePerToken   = totalSupply > 0
       ? Math.round((parseFloat(r.listing_price) || 0) / totalSupply * 100) / 100
       : 0;
 
@@ -37,6 +41,8 @@ router.get("/:herdId", async (req, res) => {
       breedCode: r.breed_code || "AN",
       riskScore: r.risk_score != null ? parseInt(r.risk_score, 10) : null,
       totalSupply,
+      investorAllocation,
+      investorPct,
       tokensSold,
       tokensAvailable,
       pricePerToken,
@@ -60,21 +66,25 @@ router.post("/", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // Resolve herd + pool
+    // Resolve herd + pool (only allow investment in feedlot-listed herds)
     const herdRow = await client.query(`
-      SELECT h.herd_id, h.purchase_status, h.tokens_sold,
+      SELECT h.herd_id, h.purchase_status, h.tokens_sold, h.investor_pct,
              tp.pool_id, tp.total_supply
       FROM herds h
       JOIN token_pools tp ON tp.herd_id = h.herd_id
-      WHERE h.herd_id = $1
+      WHERE h.herd_id = $1 AND h.feedlot_status = 'listed'
       FOR UPDATE
     `, [herdId]);
 
-    if (herdRow.rows.length === 0) throw new Error("Herd not found");
+    if (herdRow.rows.length === 0) throw new Error("Herd not found or not yet available to investors");
     const hr = herdRow.rows[0];
-    const remaining = parseInt(hr.total_supply, 10) - parseInt(hr.tokens_sold, 10);
+    const totalSupply = parseInt(hr.total_supply, 10);
+    const investorAllocation = hr.investor_pct != null
+      ? Math.floor(totalSupply * parseFloat(hr.investor_pct) / 100)
+      : totalSupply;
+    const remaining = investorAllocation - parseInt(hr.tokens_sold, 10);
     if (remaining < tokensToBuy) {
-      throw new Error(`Only ${remaining} tokens remaining`);
+      throw new Error(`Only ${remaining} investor tokens remaining`);
     }
 
     // Resolve or create user by slug (no-auth path)
@@ -111,9 +121,9 @@ router.post("/", async (req, res) => {
       VALUES ($1, $2, 'buy'::transaction_type, $3, 'confirmed')
     `, [userId, hr.pool_id, tokensToBuy]);
 
-    // Increment tokens_sold on herd
+    // Increment tokens_sold on herd; mark sold when investor allocation exhausted
     const newTokensSold = parseInt(hr.tokens_sold, 10) + tokensToBuy;
-    const newStatus = newTokensSold >= parseInt(hr.total_supply, 10) ? "sold" : hr.purchase_status;
+    const newStatus = newTokensSold >= investorAllocation ? "sold" : hr.purchase_status;
     await client.query(`
       UPDATE herds SET tokens_sold = $1, purchase_status = $2 WHERE herd_id = $3
     `, [newTokensSold, newStatus, herdId]);
@@ -122,7 +132,7 @@ router.post("/", async (req, res) => {
     res.json({
       success: true,
       message: `Successfully purchased ${tokensToBuy} token(s) in ${hr.herd_id}.`,
-      tokensRemaining: parseInt(hr.total_supply, 10) - newTokensSold,
+      tokensRemaining: investorAllocation - newTokensSold,
       newStatus,
     });
   } catch (err) {

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useParams, useMatch } from "react-router-dom";
-import { LayoutDashboard, Settings, User, Warehouse } from "lucide-react";
+import { LayoutDashboard, Settings, User, Warehouse, Tractor } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -14,12 +14,15 @@ export function AppShell() {
     ? "Administrator Portal"
     : location.pathname.startsWith("/rancher")
       ? "Rancher Portal"
-      : `Investor Portal — ${slug.replace("investor", "Investor ")}`;
+      : location.pathname.startsWith("/feedlot")
+        ? "Feedlot Portal"
+        : `Investor Portal — ${slug.replace("investor", "Investor ")}`;
 
   const NAV_ITEMS = [
     { to: `/investor/${slug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, end: true },
     { to: `/investor/${slug}/holdings`, label: "Lots", icon: Warehouse, end: false },
     { to: "/rancher", label: "Rancher", icon: User, end: false },
+    { to: "/feedlot", label: "Feedlot", icon: Tractor, end: false },
     { to: "/admin", label: "Admin", icon: Settings, end: false },
   ] as const;
 
