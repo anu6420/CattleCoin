@@ -66,6 +66,8 @@ export type Pool = {
 
   tokensSold?: number;
   tokensRemaining?: number;
+  investorAllocation?: number;  // floor(totalSupply * investorPct / 100)
+  investorPct?: number | null;  // % set by feedlot
   riskScore?: number | null;
 };
 
@@ -237,6 +239,8 @@ export type HerdInvestInfo = {
   breedCode: string;
   riskScore: number | null;
   totalSupply: number;
+  investorAllocation: number;   // tokens available to investors (= floor(totalSupply * investorPct/100))
+  investorPct: number | null;   // % of herd the feedlot made available
   tokensSold: number;
   tokensAvailable: number;
   pricePerToken: number;
@@ -258,4 +262,52 @@ export type InvestResult = {
   message: string;
   tokensRemaining: number;
   newStatus: string;
+};
+
+// ── Feedlot Types ─────────────────────────────────────────────────────────────
+
+export type FeedlotStatus = "pending" | "listed" | "sold";
+
+/** A herd as seen by the feedlot — either pending (available to claim) or already claimed */
+export type FeedlotHerd = {
+  herdId:        string;
+  herdName:      string;
+  rancherId:     string;
+  listingPrice:  number;
+  headCount:     number;
+  breedCode:     string;
+  geneticsLabel: string;
+  dominantStage: Stage;
+  season:        string;
+  verified:      boolean;
+  riskScore:     number | null;
+  feedlotStatus: FeedlotStatus;
+  investorPct:   number | null;   // % of herd available to investors (set when claimed)
+  createdAt:     string | null;
+
+  // Only present for claimed herds (dashboard view)
+  totalSupply?:             number;
+  investorAllocation?:      number; // tokens available to investors = floor(totalSupply * investorPct/100)
+  investorTokensSold?:      number;
+  investorTokensRemaining?: number;
+};
+
+export type FeedlotDashboard = {
+  feedlotSlug:   string;
+  claimedHerds:  FeedlotHerd[];
+};
+
+export type FeedlotClaimPayload = {
+  feedlotSlug: string;
+  herdId:      string;
+  investorPct: number;
+};
+
+export type FeedlotClaimResult = {
+  success:       boolean;
+  message:       string;
+  herdId:        string;
+  herdName:      string;
+  feedlotStatus: FeedlotStatus;
+  investorPct:   number;
 };

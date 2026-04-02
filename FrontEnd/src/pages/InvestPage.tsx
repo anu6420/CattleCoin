@@ -128,7 +128,7 @@ export function InvestPage() {
     <div className="max-w-lg mx-auto p-6 space-y-6">
       {/* Back link */}
       <Link
-        to={`/investor/holdings/${herd.herdId}`}
+        to={`/investor/${slug}/holdings/${herd.herdId}`}
         className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
       >
         <ArrowLeft className="h-4 w-4" /> Back to Herd Detail
@@ -151,8 +151,15 @@ export function InvestPage() {
 
           <span className="text-slate-500">Tokens Available</span>
           <span className="font-medium">
-            {herd.tokensAvailable.toLocaleString()} / {herd.totalSupply.toLocaleString()}
+            {herd.tokensAvailable.toLocaleString()} / {herd.investorAllocation.toLocaleString()}
           </span>
+
+          {herd.investorPct != null && (
+            <>
+              <span className="text-slate-500">Investor Allocation</span>
+              <span className="font-medium">{herd.investorPct}% of herd</span>
+            </>
+          )}
 
           <span className="text-slate-500">Risk Score</span>
           <span className="font-medium">

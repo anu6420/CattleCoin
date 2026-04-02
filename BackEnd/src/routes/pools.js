@@ -221,7 +221,7 @@
 //   try {
 //     const { id } = req.params;
 
-//     const herdResult = await pool.query(`${POOL_QUERY} WHERE h.herd_id = $1`, [id]);
+//     const herdResult = await pool.query(`${POOL_QUERY} AND h.herd_id = $1`, [id]);
 
 //     if (herdResult.rows.length === 0) {
 //       return res.status(404).json({ error: "Pool not found" });
@@ -430,9 +430,16 @@ function shapePool(row, tokenAmount = 0) {
   const expectedRevenueUsd = lp * 1.40;
   const totalSupply = parseInt(row.total_supply, 10) || 20;
   const tokensSold  = parseInt(row.tokens_sold, 10)  || 0;
-  const tokensRemaining = Math.max(0, totalSupply - tokensSold);
+  const investorPct = row.investor_pct != null ? parseFloat(row.investor_pct) : null;
 
-  // Data-driven availability: sold only when all tokens gone
+  // Investor allocation = the portion of total supply feedlot made available
+  const investorAllocation = investorPct != null
+    ? Math.floor(totalSupply * investorPct / 100)
+    : totalSupply;
+
+  const tokensRemaining = Math.max(0, investorAllocation - tokensSold);
+
+  // Sold only when all INVESTOR-allocated tokens are gone
   let purchaseStatus = normalisePurchaseStatus(row.purchase_status);
   if (tokensRemaining <= 0) purchaseStatus = "sold";
 
@@ -446,6 +453,8 @@ function shapePool(row, tokenAmount = 0) {
     totalSupply,
     tokensSold,
     tokensRemaining,
+    investorAllocation,
+    investorPct,
     contractAddress: row.contract_address || "",
     tokenAmount,       // how many tokens THIS investor holds (0 = not invested)
     name: row.herd_name || row.herd_id,
@@ -467,12 +476,15 @@ function shapePool(row, tokenAmount = 0) {
   };
 }
 
-// Base SELECT used by list + detail routes
+// Base SELECT used by list + detail routes.
+// Only surfaces herds that a feedlot has reviewed and listed for investors
+// (feedlot_status = 'listed'). Herds still 'pending' feedlot review are hidden.
 const POOL_QUERY = `
 SELECT
   h.herd_id, h.rancher_id, h.herd_name, h.listing_price, h.purchase_status,
   h.head_count, h.verified_flag, h.last_updated, h.cohort_label, h.season,
   h.breed_code, h.dominant_stage, h.risk_score,
+  h.investor_pct,
   COALESCE(h.tokens_sold, 0) AS tokens_sold,
   tp.pool_id, tp.total_supply, tp.contract_address,
   COALESCE(
@@ -488,6 +500,7 @@ SELECT
   ) AS position_value_usd
 FROM herds h
 LEFT JOIN token_pools tp ON tp.herd_id = h.herd_id
+WHERE h.feedlot_status = 'listed'
 `;
 
 // ─── GET /api/pools ───────────────────────────────────────────────────────────
@@ -524,7 +537,7 @@ router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const herdResult = await pool.query(`${POOL_QUERY} WHERE h.herd_id = $1`, [id]);
+    const herdResult = await pool.query(`${POOL_QUERY} AND h.herd_id = $1`, [id]);
 
     if (herdResult.rows.length === 0) {
       return res.status(404).json({ error: "Pool not found" });
