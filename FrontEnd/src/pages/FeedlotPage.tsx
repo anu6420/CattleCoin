@@ -1,5 +1,6 @@
 import * as React from "react";
 import { CheckCircle, ChevronRight, Loader2, X } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import {
   Card,
   CardHeader,
@@ -20,9 +21,6 @@ import {
 } from "@/lib/api";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const FEEDLOT_SLUGS = ["feedlot1", "feedlot2", "feedlot3"] as const;
-type FeedlotSlug = (typeof FEEDLOT_SLUGS)[number];
 
 const STAGE_COLORS: Record<string, string> = {
   RANCH:          "bg-green-100 text-green-800",
@@ -152,7 +150,7 @@ function ClaimedHerdRow({ herd }: { herd: FeedlotHerd }) {
 
 interface ClaimPanelProps {
   herd: FeedlotHerd;
-  feedlotSlug: FeedlotSlug;
+  feedlotSlug: string;
   onClose: () => void;
   onSuccess: (herdId: string) => void;
 }
@@ -267,7 +265,8 @@ function ClaimPanel({ herd, feedlotSlug, onClose, onSuccess }: ClaimPanelProps) 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function FeedlotPage() {
-  const [slug, setSlug] = React.useState<FeedlotSlug>("feedlot1");
+  const { currentUser } = useAuth();
+  const slug = currentUser?.slug ?? "";
   const [pendingHerds, setPendingHerds] = React.useState<FeedlotHerd[]>([]);
   const [claimedHerds, setClaimedHerds] = React.useState<FeedlotHerd[]>([]);
   const [selectedHerd, setSelectedHerd] = React.useState<FeedlotHerd | null>(null);
@@ -284,8 +283,9 @@ export function FeedlotPage() {
       .finally(() => setLoadingPending(false));
   }, []);
 
-  // Load claimed herds whenever slug changes
+  // Load claimed herds whenever slug is available
   React.useEffect(() => {
+    if (!slug) return;
     setLoadingClaimed(true);
     getFeedlotDashboard(slug)
       .then((data) => setClaimedHerds(data.claimedHerds))
@@ -310,31 +310,11 @@ export function FeedlotPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Feedlot Portal</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Review rancher-listed herds and publish them to the investor marketplace.
-          </p>
-        </div>
-        {/* No-auth slug selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Logged in as</span>
-          <select
-            value={slug}
-            onChange={(e) => {
-              setSlug(e.target.value as FeedlotSlug);
-              setSelectedHerd(null);
-            }}
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            {FEEDLOT_SLUGS.map((s) => (
-              <option key={s} value={s}>
-                {s.replace("feedlot", "Feedlot ")}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Feedlot Portal</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Review rancher-listed herds and publish them to the investor marketplace.
+        </p>
       </div>
 
       {/* Success banner */}

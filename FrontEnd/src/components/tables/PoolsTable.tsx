@@ -43,7 +43,7 @@ export function PoolsTable({
   const navigate = useNavigate();
   // Try to get slug from URL params if not passed directly
   const params = useParams<{ slug?: string }>();
-  const resolvedSlug = slug ?? params.slug ?? "investor1";
+  const resolvedSlug = slug ?? params.slug ?? "";
 
   const sorted = [...pools].sort((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;

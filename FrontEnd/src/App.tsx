@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { InvestorDashboard } from "@/pages/InvestorDashboard";
 import { Holdings } from "@/pages/Holdings";
@@ -10,50 +10,106 @@ import { SignUp } from "@/pages/SignUp";
 import { Admin } from "@/pages/Admin";
 import { InvestPage } from "@/pages/InvestPage";
 import { FeedlotPage } from "@/pages/FeedlotPage";
+import { WelcomePage } from "@/pages/WelcomePage";
+import { AuthProvider, useAuth, homePathForRole } from "@/context/AuthContext";
+
+// ── Route guard ───────────────────────────────────────────────────────────────
+// Redirects to /login if not authenticated.
+// Optionally restricts to a specific role; wrong-role users go to their own home.
+function Protected({
+  children,
+  role,
+}: {
+  children: React.ReactNode;
+  role?: string;
+}) {
+  const { currentUser } = useAuth();
+  const location = useLocation();
+
+  if (!currentUser) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  if (role && currentUser.role !== role) {
+    return <Navigate to={homePathForRole(currentUser)} replace />;
+  }
+  return <>{children}</>;
+}
+
+// ── Inner app (needs AuthContext already mounted) ─────────────────────────────
+function AppRoutes() {
+  const { currentUser } = useAuth();
+
+  return (
+    <Routes>
+      {/* Welcome / landing */}
+      <Route path="/" element={<WelcomePage />} />
+
+      {/* Auth */}
+      <Route path="/login"  element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
+
+      {/* All routes inside the AppShell layout */}
+      <Route element={<AppShell />}>
+        {/* Investor routes */}
+        <Route
+          path="/investor/:slug/dashboard"
+          element={<Protected role="investor"><InvestorDashboard /></Protected>}
+        />
+        <Route
+          path="/investor/:slug/holdings"
+          element={<Protected role="investor"><Holdings /></Protected>}
+        />
+        <Route
+          path="/investor/:slug/holdings/:id"
+          element={<Protected role="investor"><PoolDetail /></Protected>}
+        />
+        <Route
+          path="/investor/:slug/cow/:cowId"
+          element={<Protected role="investor"><CowDetail /></Protected>}
+        />
+        <Route
+          path="/invest/:herdId"
+          element={<Protected role="investor"><InvestPage /></Protected>}
+        />
+
+        {/* Rancher portal */}
+        <Route
+          path="/rancher"
+          element={<Protected role="rancher"><Rancher /></Protected>}
+        />
+
+        {/* Feedlot portal */}
+        <Route
+          path="/feedlot"
+          element={<Protected role="feedlot"><FeedlotPage /></Protected>}
+        />
+
+        {/* Admin portal */}
+        <Route
+          path="/admin"
+          element={<Protected role="admin"><Admin /></Protected>}
+        />
+      </Route>
+
+      {/* Catch-all: if logged in go home, otherwise login */}
+      <Route
+        path="*"
+        element={
+          currentUser
+            ? <Navigate to={homePathForRole(currentUser)} replace />
+            : <Navigate to="/login" replace />
+        }
+      />
+    </Routes>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* No-auth investor login shortcuts */}
-        <Route path="/login/investor1" element={<Navigate to="/investor/investor1/dashboard" replace />} />
-        <Route path="/login/investor2" element={<Navigate to="/investor/investor2/dashboard" replace />} />
-        <Route path="/login/investor3" element={<Navigate to="/investor/investor3/dashboard" replace />} />
-        <Route path="/login/investor4" element={<Navigate to="/investor/investor4/dashboard" replace />} />
-        <Route path="/login/investor5" element={<Navigate to="/investor/investor5/dashboard" replace />} />
-
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/investor/investor1/dashboard" replace />} />
-
-        {/* Legacy redirect — old /investor path goes to investor1 dashboard */}
-        <Route path="/investor" element={<Navigate to="/investor/investor1/dashboard" replace />} />
-
-        {/* All investor routes — scoped per slug */}
-        <Route element={<AppShell />}>
-          {/* Dashboard */}
-          <Route path="/investor/:slug/dashboard" element={<InvestorDashboard />} />
-
-          {/* Holdings / marketplace — all herds listed */}
-          <Route path="/investor/:slug/holdings" element={<Holdings />} />
-
-          {/* Herd detail — investor-specific view */}
-          <Route path="/investor/:slug/holdings/:id" element={<PoolDetail />} />
-
-          {/* Cow detail */}
-          <Route path="/investor/:slug/cow/:cowId" element={<CowDetail />} />
-
-          {/* Invest page */}
-          <Route path="/invest/:herdId" element={<InvestPage />} />
-
-          {/* Non-investor portals */}
-          <Route path="/rancher" element={<Rancher />} />
-          <Route path="/feedlot" element={<FeedlotPage />} />
-          <Route path="/admin" element={<Admin />} />
-        </Route>
-
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} />
-      </Routes>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }
