@@ -10,6 +10,9 @@ import investRoutes from "./routes/invest.js";
 import feedlotsRoutes from "./routes/feedlots.js";
 import authRoutes from "./routes/auth.js";
 import usersRoutes from "./routes/users.js";
+import rancherRoutes from "./routes/rancher.js";
+import herdsRoutes from "./routes/herds.js";
+import cattleRoutes from "./routes/cattle.js";
 
 dotenv.config();
 
@@ -27,6 +30,9 @@ app.use("/api/invest",    investRoutes);    // POST buy-tokens form
 app.use("/api/feedlot",  feedlotsRoutes);  // feedlot claim + dashboard
 app.use("/api/auth",     authRoutes);      // login
 app.use("/api/users",    usersRoutes);     // user list by role
+app.use("/api/rancher", rancherRoutes);
+app.use("/api/herds", herdsRoutes);
+app.use("/api/cattle", cattleRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/api/health", async (req, res) => {

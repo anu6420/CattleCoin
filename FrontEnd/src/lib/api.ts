@@ -24,6 +24,15 @@ async function fetchJSON<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string; message?: string };
+    return body.error ?? body.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // ─── Portfolio (global, used by Admin) ───────────────────────────────────────
 export async function getPortfolio(): Promise<PortfolioSummary> {
   return fetchJSON("/portfolio");
@@ -142,4 +151,121 @@ export async function postFeedlotClaim(payload: FeedlotClaimPayload): Promise<Fe
     throw new Error(body || `Claim failed: ${res.status}`);
   }
   return res.json() as Promise<FeedlotClaimResult>;
+}
+
+// ─── Rancher ─────────────────────────────────────────────────────────────────
+
+export type RancherCreateHerdPayload = {
+  name: string;
+  genetics_label: string;
+  breed_code: string;
+  season: "Spring" | "Fall";
+  listing_price: number;
+  head_count: number;
+  purchase_status?: "available" | "pending" | "sold";
+};
+
+export type RancherCreateHerdResult = {
+  message: string;
+  herd: {
+    herd_id: string;
+    herd_name: string;
+    listing_price: string | number | null;
+    purchase_status: string;
+  };
+};
+
+export type RancherBulkCowPayload = {
+  registration_number: string;
+  official_id_suffix: string;
+  breed_code: string;
+  sex_code: "B" | "C" | "H" | "S";
+  birth_date: string;
+  weight_lbs: number;
+  animal_name?: string;
+  sire_registration_number?: string;
+  dam_registration_number?: string;
+  is_genomic_enhanced?: boolean;
+};
+
+export type RancherBulkRegisterResult = {
+  message: string;
+  herdId: string;
+  count: number;
+  items: Array<{
+    cow: { animal_id: number; registration_number: string; official_id: string | null };
+  }>;
+};
+
+export type RancherPublishResult = {
+  message: string;
+  herd: {
+    herd_id: string;
+    purchase_status: string;
+    listing_price: string | number | null;
+  };
+};
+
+export async function postRancherCreateHerd(
+  rancherId: string,
+  payload: RancherCreateHerdPayload
+): Promise<RancherCreateHerdResult> {
+  const res = await fetch(`${API_BASE}/herds`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to create herd (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherCreateHerdResult>;
+}
+
+export async function postRancherRegisterCattleBulk(
+  rancherId: string,
+  herdId: string,
+  cattle: RancherBulkCowPayload[]
+): Promise<RancherBulkRegisterResult> {
+  const res = await fetch(`${API_BASE}/herds/${herdId}/cattle/bulk`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify({ cattle }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to register cattle (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherBulkRegisterResult>;
+}
+
+export async function postRancherPublishHerd(
+  rancherId: string,
+  herdId: string,
+  listingPrice?: number
+): Promise<RancherPublishResult> {
+  const res = await fetch(`${API_BASE}/herds/${herdId}/publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify(
+      listingPrice === undefined ? {} : { listingPrice }
+    ),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to publish herd (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherPublishResult>;
 }

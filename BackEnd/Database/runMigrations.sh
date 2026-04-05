@@ -14,4 +14,4 @@ for file in "$MIGRATIONS_DIR"/*.sql; do
   docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" < "$file"
 done
 
-echo "✅ Done. All migrations applied."
+echo "Done. All migrations applied."
