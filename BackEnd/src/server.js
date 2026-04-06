@@ -19,6 +19,10 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
+
+// Stripe webhooks require the raw body — mount BEFORE express.json()
+app.use("/api/invest/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.json());
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -35,7 +39,7 @@ app.use("/api/herds", herdsRoutes);
 app.use("/api/cattle", cattleRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
-app.get("/api/health", async (req, res) => {
+app.get("/api/health", async (_req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
     res.json({ status: "ok", dbTime: result.rows[0] });
