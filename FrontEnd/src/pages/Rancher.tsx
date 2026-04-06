@@ -1,5 +1,7 @@
 import * as React from "react";
 import { CheckCircle, X, ChevronRight } from "lucide-react";
+import { Importer, ImporterField } from "react-csv-importer";
+import "react-csv-importer/dist/index.css";
 import {
   Card,
   CardHeader,
@@ -32,11 +34,14 @@ interface HerdFormData {
   season: Season | "";
   listing_price: string;
   head_count: string;
+  birth_date: string;    // first birthday of the group
+  sale_date: string;     // expected sale date
+  sale_location: string; // zipcode or location
 }
 
 interface CowFormData {
   registration_number: string;
-  official_id_suffix: string; // user types last 12 digits; "840" prepended on submit
+  official_id_suffix: string;
   breed_code: string;
   sex_code: SexCode | "";
   birth_date: string;
@@ -53,19 +58,12 @@ interface QueuedCow extends CowFormData {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const SEX_OPTIONS: { value: SexCode; label: string }[] = [
-  { value: "B", label: "Bull" },
-  { value: "C", label: "Calf" },
-  { value: "H", label: "Heifer" },
-  { value: "S", label: "Steer" },
-];
-
 const SEASON_OPTIONS: { value: Season; label: string }[] = [
   { value: "Spring", label: "Spring" },
   { value: "Fall", label: "Fall" },
 ];
 
-const STEP_LABELS = ["Create Herd", "Register Cattle", "Review & Publish"];
+const STEP_LABELS = ["Create Herd", "Upload Cattle", "Review & Publish"];
 
 const EMPTY_HERD: HerdFormData = {
   name: "",
@@ -74,19 +72,9 @@ const EMPTY_HERD: HerdFormData = {
   season: "",
   listing_price: "",
   head_count: "",
-};
-
-const EMPTY_COW: CowFormData = {
-  registration_number: "",
-  official_id_suffix: "",
-  breed_code: "",
-  sex_code: "",
   birth_date: "",
-  weight_lbs: "",
-  animal_name: "",
-  sire_registration_number: "",
-  dam_registration_number: "",
-  is_genomic_enhanced: false,
+  sale_date: "",
+  sale_location: "",
 };
 
 // ── StepIndicator ─────────────────────────────────────────────────────────────
@@ -198,6 +186,30 @@ function Field({
   );
 }
 
+// ── CSV row → QueuedCow ───────────────────────────────────────────────────────
+
+function rowToQueuedCow(row: Record<string, string | undefined>): QueuedCow {
+  const rawSuffix = String(row.official_id_suffix ?? row.official_id ?? "").replace(/\D/g, "").slice(0, 12);
+  const rawSex = String(row.sex_code ?? "").toUpperCase();
+  const validSex: SexCode[] = ["B", "C", "H", "S"];
+
+  return {
+    _queueId: crypto.randomUUID(),
+    registration_number: String(row.registration_number ?? ""),
+    official_id_suffix: rawSuffix,
+    breed_code: String(row.breed_code ?? "").toUpperCase(),
+    sex_code: validSex.includes(rawSex as SexCode) ? (rawSex as SexCode) : "",
+    birth_date: String(row.birth_date ?? ""),
+    weight_lbs: String(row.weight_lbs ?? ""),
+    animal_name: String(row.animal_name ?? ""),
+    sire_registration_number: String(row.sire_registration_number ?? ""),
+    dam_registration_number: String(row.dam_registration_number ?? ""),
+    is_genomic_enhanced:
+      String(row.is_genomic_enhanced ?? "").toLowerCase() === "true" ||
+      row.is_genomic_enhanced === "1",
+  };
+}
+
 // ── Rancher (main page) ───────────────────────────────────────────────────────
 
 export function Rancher() {
@@ -210,10 +222,10 @@ export function Rancher() {
   const [herdError, setHerdError] = React.useState<string | null>(null);
 
   // Step 2
-  const [cow, setCow] = React.useState<CowFormData>(EMPTY_COW);
   const [cowQueue, setCowQueue] = React.useState<QueuedCow[]>([]);
-  const [cowError, setCowError] = React.useState<string | null>(null);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [cattleError, setCattleError] = React.useState<string | null>(null);
+  const pendingRowsRef = React.useRef<QueuedCow[]>([]);
 
   // Step 3
   const [published, setPublished] = React.useState(false);
@@ -247,7 +259,10 @@ export function Rancher() {
       !herd.breed_code.trim() ||
       !herd.season ||
       !herd.listing_price ||
-      !herd.head_count
+      !herd.head_count ||
+      !herd.birth_date ||
+      !herd.sale_date ||
+      !herd.sale_location.trim()
     ) {
       setHerdError("All fields are required.");
       return;
@@ -285,38 +300,19 @@ export function Rancher() {
 
   // ── Step 2 handlers ──────────────────────────────────────────────────────────
 
-  function setCowField<K extends keyof CowFormData>(key: K, val: CowFormData[K]) {
-    setCow((c) => ({ ...c, [key]: val }));
+  async function handleCsvChunk(rows: Record<string, string | undefined>[]) {
+    pendingRowsRef.current.push(...rows.map(rowToQueuedCow));
   }
 
-  function handleAddCow(e: React.FormEvent) {
-    e.preventDefault();
-    setCowError(null);
-
-    if (cattleRegistered) {
-      setCowError("Cattle already registered for this lot. Go to review/publish.");
+  function handleCsvComplete() {
+    setUploadError(null);
+    const imported = pendingRowsRef.current;
+    pendingRowsRef.current = [];
+    if (imported.length === 0) {
+      setUploadError("No rows found in the uploaded file.");
       return;
     }
-
-    if (
-      !cow.registration_number.trim() ||
-      !cow.official_id_suffix.trim() ||
-      !cow.breed_code.trim() ||
-      !cow.sex_code ||
-      !cow.birth_date ||
-      !cow.weight_lbs
-    ) {
-      setCowError("Please fill in all required fields.");
-      return;
-    }
-
-    if (cow.official_id_suffix.length !== 12) {
-      setCowError("Official ID suffix must be exactly 12 digits (840 + 12 = 15 total).");
-      return;
-    }
-
-    setCowQueue((q) => [...q, { ...cow, _queueId: crypto.randomUUID() }]);
-    setCow(EMPTY_COW);
+    setCowQueue((q) => [...q, ...imported]);
   }
 
   function handleRemoveCow(queueId: string) {
@@ -338,7 +334,7 @@ export function Rancher() {
     }
 
     if (cowQueue.length === 0) {
-      setCattleError("Add at least one cow before continuing.");
+      setCattleError("Upload at least one cow before continuing.");
       return;
     }
 
@@ -406,7 +402,6 @@ export function Rancher() {
     setStep(1);
     setHerd(EMPTY_HERD);
     setHerdSnapshot(null);
-    setCow(EMPTY_COW);
     setCowQueue([]);
     setPublished(false);
     setCreatedHerdId(null);
@@ -415,7 +410,7 @@ export function Rancher() {
     setIsPublishing(false);
     setCattleRegistered(false);
     setHerdError(null);
-    setCowError(null);
+    setUploadError(null);
     setCattleError(null);
   }
 
@@ -447,7 +442,7 @@ export function Rancher() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Post a Lot</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Create a herd listing, register cattle, then publish for investors.
+          Create a herd listing, upload cattle via CSV, then publish for investors.
         </p>
       </div>
 
@@ -462,7 +457,7 @@ export function Rancher() {
           <CardHeader>
             <CardTitle>Herd Details</CardTitle>
             <CardDescription>
-              Define the lot name, breed, and pricing for this listing.
+              Define the lot name, breed, pricing, and sale information.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -531,6 +526,45 @@ export function Rancher() {
                 </Field>
               </div>
 
+              <Separator />
+
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Group Info
+              </p>
+
+              <Field
+                label="Group Birth Date"
+                required
+                hint="First birthday of the group"
+              >
+                <Input
+                  type="date"
+                  value={herd.birth_date}
+                  onChange={(e) => setHerdField("birth_date", e.target.value)}
+                />
+              </Field>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Expected Sale Date" required>
+                  <Input
+                    type="date"
+                    value={herd.sale_date}
+                    onChange={(e) => setHerdField("sale_date", e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Sale Location"
+                  required
+                  hint="Zipcode or city/state"
+                >
+                  <Input
+                    placeholder="e.g. 77840 or College Station, TX"
+                    value={herd.sale_location}
+                    onChange={(e) => setHerdField("sale_location", e.target.value)}
+                  />
+                </Field>
+              </div>
+
               {herdError && (
                 <p className="text-sm text-destructive">{herdError}</p>
               )}
@@ -546,163 +580,50 @@ export function Rancher() {
         </Card>
       )}
 
-      {/* ── Step 2: Register Cattle ─────────────────────────────────────────── */}
+      {/* ── Step 2: Upload Cattle ───────────────────────────────────────────── */}
       {step === 2 && (
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Add a Cow</CardTitle>
+              <CardTitle>Upload Cattle</CardTitle>
               <CardDescription>
-                Fill in the details and click &ldquo;Add Cow&rdquo; to queue each
-                animal. Continue when you&rsquo;re ready to review.
+                Import individual cow records from a CSV file. Your spreadsheet
+                should include columns:{" "}
+                <span className="font-mono text-xs">
+                  registration_number, official_id_suffix, breed_code, sex_code
+                  (B/C/H/S), birth_date (YYYY-MM-DD), weight_lbs
+                </span>
+                . Optional:{" "}
+                <span className="font-mono text-xs">
+                  animal_name, sire_registration_number,
+                  dam_registration_number, is_genomic_enhanced
+                </span>
+                .
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAddCow} className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Registration Number" required>
-                    <Input
-                      placeholder="e.g. 1234567"
-                      value={cow.registration_number}
-                      disabled={cattleLocked}
-                      onChange={(e) =>
-                        setCowField("registration_number", e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="Official ID (USDA EID)"
-                    required
-                    hint="840 prefix applied automatically — enter 12-digit suffix"
-                  >
-                    <div className="flex items-center gap-1">
-                      <span className="flex h-10 shrink-0 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground select-none">
-                        840
-                      </span>
-                      <Input
-                        placeholder="000000000000"
-                        maxLength={12}
-                        value={cow.official_id_suffix}
-                        disabled={cattleLocked}
-                        onChange={(e) =>
-                          setCowField(
-                            "official_id_suffix",
-                            e.target.value.replace(/\D/g, "").slice(0, 12)
-                          )
-                        }
-                      />
-                    </div>
-                  </Field>
-                </div>
+            <CardContent className="space-y-4">
+              {/* CSV Importer */}
+              <Importer
+                dataHandler={handleCsvChunk}
+                onComplete={handleCsvComplete}
+                onClose={() => { pendingRowsRef.current = []; }}
+                restartable
+              >
+                <ImporterField name="registration_number" label="Registration Number" />
+                <ImporterField name="official_id_suffix" label="Official ID Suffix (12-digit EID)" optional />
+                <ImporterField name="breed_code" label="Breed Code" />
+                <ImporterField name="sex_code" label="Sex Code (B/C/H/S)" />
+                <ImporterField name="birth_date" label="Birth Date (YYYY-MM-DD)" />
+                <ImporterField name="weight_lbs" label="Weight (lbs)" />
+                <ImporterField name="animal_name" label="Animal Name" optional />
+                <ImporterField name="sire_registration_number" label="Sire Registration #" optional />
+                <ImporterField name="dam_registration_number" label="Dam Registration #" optional />
+                <ImporterField name="is_genomic_enhanced" label="Genomic Enhanced (true/false)" optional />
+              </Importer>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Breed Code" required>
-                    <Input
-                      placeholder="e.g. AN"
-                      value={cow.breed_code}
-                      disabled={cattleLocked}
-                      onChange={(e) =>
-                        setCowField("breed_code", e.target.value.toUpperCase())
-                      }
-                    />
-                  </Field>
-                  <Field label="Birth Date" required>
-                    <Input
-                      type="date"
-                      value={cow.birth_date}
-                      disabled={cattleLocked}
-                      onChange={(e) => setCowField("birth_date", e.target.value)}
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Sex" required>
-                  <PillGroup
-                    options={SEX_OPTIONS}
-                    value={cow.sex_code}
-                    disabled={cattleLocked}
-                    onChange={(v) => setCowField("sex_code", v)}
-                  />
-                </Field>
-
-                <Field label="Weight (lbs)" required>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="e.g. 650"
-                    value={cow.weight_lbs}
-                    disabled={cattleLocked}
-                    onChange={(e) => setCowField("weight_lbs", e.target.value)}
-                  />
-                </Field>
-
-                <Separator />
-
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Optional
-                </p>
-
-                <Field label="Animal Name">
-                  <Input
-                    placeholder="e.g. Bessie"
-                    value={cow.animal_name}
-                    disabled={cattleLocked}
-                    onChange={(e) => setCowField("animal_name", e.target.value)}
-                  />
-                </Field>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Sire Registration #">
-                    <Input
-                      placeholder="e.g. 7654321"
-                      value={cow.sire_registration_number}
-                      disabled={cattleLocked}
-                      onChange={(e) =>
-                        setCowField("sire_registration_number", e.target.value)
-                      }
-                    />
-                  </Field>
-                  <Field label="Dam Registration #">
-                    <Input
-                      placeholder="e.g. 9876543"
-                      value={cow.dam_registration_number}
-                      disabled={cattleLocked}
-                      onChange={(e) =>
-                        setCowField("dam_registration_number", e.target.value)
-                      }
-                    />
-                  </Field>
-                </div>
-
-                <Field label="Genomic Enhanced">
-                  <button
-                    type="button"
-                    disabled={cattleLocked}
-                    onClick={() =>
-                      setCowField("is_genomic_enhanced", !cow.is_genomic_enhanced)
-                    }
-                    className={cn(
-                      "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                      cow.is_genomic_enhanced
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    {cow.is_genomic_enhanced ? "Yes" : "No"}
-                  </button>
-                </Field>
-
-                {cowError && (
-                  <p className="text-sm text-destructive">{cowError}</p>
-                )}
-
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" variant="secondary" disabled={cattleLocked}>
-                    {cattleLocked ? "Cattle Registered" : "+ Add Cow"}
-                  </Button>
-                </div>
-              </form>
+              {uploadError && (
+                <p className="text-sm text-destructive">{uploadError}</p>
+              )}
             </CardContent>
           </Card>
 
@@ -710,7 +631,7 @@ export function Rancher() {
           {cowQueue.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">
-                Queued — {cowQueue.length}{" "}
+                Imported — {cowQueue.length}{" "}
                 {cowQueue.length === 1 ? "cow" : "cows"}
               </p>
               {cowQueue.map((c) => (
@@ -723,12 +644,16 @@ export function Rancher() {
                       <span className="text-sm font-semibold">
                         {c.animal_name || c.registration_number}
                       </span>
-                      <Badge variant="outline" className="text-xs">
-                        {c.sex_code}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {c.breed_code}
-                      </Badge>
+                      {c.sex_code && (
+                        <Badge variant="outline" className="text-xs">
+                          {c.sex_code}
+                        </Badge>
+                      )}
+                      {c.breed_code && (
+                        <Badge variant="outline" className="text-xs">
+                          {c.breed_code}
+                        </Badge>
+                      )}
                       {c.is_genomic_enhanced && (
                         <Badge variant="secondary" className="text-xs">
                           GE
@@ -736,9 +661,11 @@ export function Rancher() {
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
-                      Reg: {c.registration_number} &bull; EID: 840
-                      {c.official_id_suffix} &bull; DOB: {c.birth_date} &bull;{" "}
-                      {c.weight_lbs} lbs
+                      Reg: {c.registration_number}
+                      {c.official_id_suffix && (
+                        <> &bull; EID: 840{c.official_id_suffix}</>
+                      )}
+                      {c.weight_lbs && <> &bull; {c.weight_lbs} lbs</>}
                     </p>
                   </div>
                   <button
@@ -804,6 +731,9 @@ export function Rancher() {
                       value: `$${parseFloat(herdSnapshot.listing_price).toLocaleString()}`,
                     },
                     { label: "Head Count", value: herdSnapshot.head_count },
+                    { label: "Group Birth Date", value: herdSnapshot.birth_date },
+                    { label: "Expected Sale Date", value: herdSnapshot.sale_date },
+                    { label: "Sale Location", value: herdSnapshot.sale_location },
                   ] as { label: string; value: string }[]
                 ).map(({ label, value }) => (
                   <div key={label}>
@@ -832,12 +762,16 @@ export function Rancher() {
                     <span className="text-sm font-semibold">
                       {c.animal_name || c.registration_number}
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {c.sex_code}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      {c.breed_code}
-                    </Badge>
+                    {c.sex_code && (
+                      <Badge variant="outline" className="text-xs">
+                        {c.sex_code}
+                      </Badge>
+                    )}
+                    {c.breed_code && (
+                      <Badge variant="outline" className="text-xs">
+                        {c.breed_code}
+                      </Badge>
+                    )}
                     {c.is_genomic_enhanced && (
                       <Badge variant="secondary" className="text-xs">
                         GE
@@ -845,9 +779,11 @@ export function Rancher() {
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Reg: {c.registration_number} &bull; EID: 840
-                    {c.official_id_suffix} &bull; DOB: {c.birth_date} &bull;{" "}
-                    {c.weight_lbs} lbs
+                    Reg: {c.registration_number}
+                    {c.official_id_suffix && (
+                      <> &bull; EID: 840{c.official_id_suffix}</>
+                    )}
+                    {c.weight_lbs && <> &bull; {c.weight_lbs} lbs</>}
                   </p>
                 </div>
               ))}
