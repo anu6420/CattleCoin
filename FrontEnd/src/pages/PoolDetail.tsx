@@ -15,7 +15,7 @@ import { PipelineBar } from "@/components/pool/PipelineBar";
 import { BudgetBreakdown } from "@/components/pool/BudgetBreakdown";
 import { CowsTable, CowsTableSkeleton } from "@/components/tables/CowsTable";
 import { getPoolById, getPoolCows, getInvestorHoldings } from "@/lib/api";
-import type { PoolDetail as PoolDetailType, Cow, Document, PurchaseStatus } from "@/lib/types";
+import type { PoolDetail as PoolDetailType, Cow, PurchaseStatus } from "@/lib/types";
 import { formatUsd, formatNumber } from "@/lib/utils";
 
 const DOC_ICONS: Record<string, React.ElementType> = {

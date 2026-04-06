@@ -46,7 +46,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, formatUsd, formatPct } from "@/lib/utils";
+import { cn, formatPct } from "@/lib/utils";
 
 interface KpiCardProps {
   label: string;
