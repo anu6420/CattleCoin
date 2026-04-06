@@ -49,11 +49,11 @@ A shared `.env` file exists at the **project root** (`CattleCoin/.env`).
 Example:
 
 ```
-DATABASE_URL=postgresql://cattlecoin:cattlecoin@localhost:5432/cattlecoin
+DATABASE_URL=postgresql://cattlecoin:cattlecoin@localhost:5433/cattlecoin
 POSTGRES_DB=cattlecoin
 POSTGRES_USER=cattlecoin
 POSTGRES_PASSWORD=cattlecoin
-POSTGRES_PORT=5432
+POSTGRES_PORT=5433
 ```
 
 The backend loads this automatically using dotenv.

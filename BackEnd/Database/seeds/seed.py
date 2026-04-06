@@ -213,6 +213,7 @@ class User:
     user_id: str
     role: str
     email: str
+    slug: str
     wallet_address: Optional[str] = None
 
 
@@ -227,6 +228,9 @@ class Herd:
     purchase_status: str
     verified_flag: bool
     stage: str
+    feedlot_status: str = "pending"          # 'pending' | 'listed'
+    investor_pct: Optional[float] = None     # % of tokens available to investors
+    feedlot_slug: Optional[str] = None       # slug of feedlot user who claimed this herd
     projected_roi_annual: Optional[float] = None
 
 
@@ -251,13 +255,16 @@ class Animal:
 
 def build_users() -> list[User]:
     users: list[User] = []
-    users.append(User(uid(), "admin", "admin@cattleplatform.io", None))
+    users.append(User(uid(), "admin",    "admin@cattleplatform.io",    "admin",    None))
     for i in range(1, 6):
-        users.append(User(uid(), "rancher", f"rancher{i}@platform.io",
+        users.append(User(uid(), "rancher",  f"rancher{i}@platform.io",   f"rancher{i}",
                           f"0x{'%020x' % (i,)}"))
     for i in range(1, 6):
-        users.append(User(uid(), "investor", f"investor{i}@platform.io",
+        users.append(User(uid(), "investor", f"investor{i}@platform.io",  f"investor{i}",
                           f"0x{'%020x' % (i,)}"))
+    for i in range(1, 4):
+        users.append(User(uid(), "feedlot",  f"feedlot{i}@cattlecoin.dev", f"feedlot{i}",
+                          None))
     return users
 
 
@@ -266,31 +273,40 @@ def build_users() -> list[User]:
 # ---------------------------------------------------------------------------
 
 def build_herds(users: list[User]) -> list[Herd]:
-    ranchers = [u for u in users if u.role == "rancher"]
+    ranchers  = [u for u in users if u.role == "rancher"]
+    feedlots  = [u for u in users if u.role == "feedlot"]
+
+    # Columns:
+    # (rancher_idx, name, breed, head, purchase_status, verified, stage,
+    #  feedlot_slug,    investor_pct)
+    #
+    # feedlot_slug=None  → feedlot_status='pending' (not yet reviewed by feedlot)
+    # feedlot_slug set   → feedlot_status='listed'  (feedlot assigned investor %)
     specs = [
-        (0, "Angus Prime Herd A",      "AN",  42, "available", True,  "feedlot",       0.75),
-        (0, "Angus Reserve B",         "AN",  28, "available", True,  "backgrounding", 0.40),
-        (0, "Black Angus Feeders C",   "AN",  35, "sold",      True,  "processing",    0.95),
-        (0, "Angus Finishing D",       "AN",  50, "available", True,  "feedlot",       0.85),
-        (1, "Red Angus Select A",      "AN",  30, "available", True,  "backgrounding", 0.50),
-        (1, "Red Angus Yearling B",    "AN",  22, "pending",   True,  "ranch",         0.25),
-        (1, "Red Angus Yearling C",    "AN",  27, "available", True,  "backgrounding", 0.45),
-        (2, "Hereford Prime A",        "HH",  38, "available", True,  "feedlot",       0.70),
-        (2, "Hereford Select B",       "HH",  25, "available", False, "backgrounding", 0.35),
-        (2, "Hereford Grassfed C",     "HH",  20, "available", True,  "ranch",         0.60),
-        (2, "Simmental Prime A",       "SIM", 31, "available", True,  "feedlot",       0.65),
-        (2, "Simmental Yearling B",    "SIM", 23, "pending",   False, "backgrounding", 0.30),
-        (3, "Wagyu A5 Reserve A",      "WAG", 20, "available", True,  "feedlot",       0.90),
-        (3, "Wagyu F1 Select B",       "WAG", 24, "available", True,  "feedlot",       0.80),
-        (3, "Wagyu Cross C",           "WAG", 30, "sold",      True,  "processing",    0.95),
-        (4, "Brahman Select A",        "BR",  26, "available", False, "ranch",         0.45),
-        (4, "Brangus Prime A",         "BN",  33, "available", True,  "backgrounding", 0.55),
-        (4, "Brangus Yearling B",      "BN",  21, "pending",   True,  "ranch",         0.20),
-        (1, "Charolais Prime A",       "CH",  29, "available", True,  "feedlot",       0.75),
-        (1, "Charolais Feeders B",     "CH",  44, "available", True,  "feedlot",       0.70),
+        (0, "Angus Prime Herd A",      "AN",  42, "available", True,  "feedlot",       "feedlot1", 75),
+        (0, "Angus Reserve B",         "AN",  28, "available", True,  "backgrounding", "feedlot2", 40),
+        (0, "Black Angus Feeders C",   "AN",  35, "sold",      True,  "processing",    "feedlot3", 95),
+        (0, "Angus Finishing D",       "AN",  50, "available", True,  "feedlot",       "feedlot1", 85),
+        (1, "Red Angus Select A",      "AN",  30, "available", True,  "backgrounding", "feedlot2", 50),
+        (1, "Red Angus Yearling B",    "AN",  22, "available", True,  "ranch",         None,       None),  # pending
+        (1, "Red Angus Yearling C",    "AN",  27, "available", True,  "backgrounding", "feedlot3", 45),
+        (2, "Hereford Prime A",        "HH",  38, "available", True,  "feedlot",       "feedlot2", 70),
+        (2, "Hereford Select B",       "HH",  25, "available", False, "backgrounding", None,       None),  # pending
+        (2, "Hereford Grassfed C",     "HH",  20, "available", True,  "ranch",         "feedlot3", 60),
+        (2, "Simmental Prime A",       "SIM", 31, "available", True,  "feedlot",       "feedlot3", 65),
+        (2, "Simmental Yearling B",    "SIM", 23, "available", False, "backgrounding", None,       None),  # pending
+        (3, "Wagyu A5 Reserve A",      "WAG", 20, "available", True,  "feedlot",       "feedlot1", 90),
+        (3, "Wagyu F1 Select B",       "WAG", 24, "available", True,  "feedlot",       "feedlot2", 80),
+        (3, "Wagyu Cross C",           "WAG", 30, "sold",      True,  "processing",    "feedlot3", 95),
+        (4, "Brahman Select A",        "BR",  26, "available", False, "ranch",         None,       None),  # pending
+        (4, "Brangus Prime A",         "BN",  33, "available", True,  "backgrounding", "feedlot1", 55),
+        (4, "Brangus Yearling B",      "BN",  21, "available", True,  "ranch",         None,       None),  # pending
+        (1, "Charolais Prime A",       "CH",  29, "available", True,  "feedlot",       "feedlot2", 75),
+        (1, "Charolais Feeders B",     "CH",  44, "available", True,  "feedlot",       "feedlot3", 70),
     ]
     herds: list[Herd] = []
-    for rancher_idx, name, breed, head, status, verified, stage, _pct in specs:
+    for rancher_idx, name, breed, head, status, verified, stage, feedlot_slug, investor_pct in specs:
+        is_listed = feedlot_slug is not None
         herds.append(Herd(
             herd_id=uid(),
             rancher_id=ranchers[rancher_idx].user_id,
@@ -301,6 +317,9 @@ def build_herds(users: list[User]) -> list[Herd]:
             purchase_status=status,
             verified_flag=verified,
             stage=stage,
+            feedlot_status="listed" if is_listed else "pending",
+            investor_pct=float(investor_pct) if investor_pct is not None else None,
+            feedlot_slug=feedlot_slug,
         ))
     return herds
 
@@ -358,9 +377,9 @@ def gen_users(users: list[User]) -> list[str]:
     out = []
     for u in users:
         out.append(
-            f"INSERT INTO users (user_id, role, email, password_hash, wallet_address) VALUES "
+            f"INSERT INTO users (user_id, role, email, password_hash, wallet_address, slug) VALUES "
             f"({q(u.user_id)}, {q(u.role)}::user_role, {q(u.email)}, "
-            f"{q('$2b$12$placeholder_hash')}, {q(u.wallet_address)});"
+            f"{q('$2b$12$placeholder_hash')}, {q(u.wallet_address)}, {q(u.slug)});"
         )
     return out
 
@@ -368,11 +387,19 @@ def gen_users(users: list[User]) -> list[str]:
 def gen_herds(herds: list[Herd]) -> list[str]:
     out = []
     for h in herds:
+        # feedlot_user_id is resolved via subquery against the slug
+        if h.feedlot_slug is not None:
+            feedlot_uid = f"(SELECT user_id FROM users WHERE slug = {q(h.feedlot_slug)} LIMIT 1)"
+        else:
+            feedlot_uid = "NULL"
+        inv_pct = str(h.investor_pct) if h.investor_pct is not None else "NULL"
         out.append(
             "INSERT INTO herds "
-            "(herd_id, rancher_id, herd_name, head_count, listing_price, purchase_status, verified_flag) VALUES "
+            "(herd_id, rancher_id, herd_name, head_count, listing_price, purchase_status, "
+            "verified_flag, feedlot_status, investor_pct, feedlot_user_id) VALUES "
             f"({q(h.herd_id)}, {q(h.rancher_id)}, {q(h.herd_name)}, "
-            f"{h.head_count}, {h.listing_price}, {q(h.purchase_status)}, {q(h.verified_flag)});"
+            f"{h.head_count}, {h.listing_price}, {q(h.purchase_status)}, {q(h.verified_flag)}, "
+            f"{q(h.feedlot_status)}, {inv_pct}, {feedlot_uid});"
         )
     return out
 
@@ -859,15 +886,37 @@ def gen_ownership(users: list[User], herds: list[Herd]) -> list[str]:
     investors = [u for u in users if u.role == "investor"]
     out: list[str] = []
     for h in herds:
+        # Pending herds have NOT been listed to investors yet — no ownership.
+        if h.feedlot_status == "pending":
+            continue
+
         total = h.head_count * 1000
+        # Investors can only purchase up to investor_allocation tokens
+        investor_allocation = int(total * h.investor_pct / 100.0) if h.investor_pct is not None else total
+        if investor_allocation < 1:
+            continue
+
         pool_sq = pool_subq(h.herd_id)
-        n_inv = random.randint(1, min(3, len(investors)))
-        selected = random.sample(investors, n_inv)
-        if n_inv == 1:
-            splits = [total]
+
+        if h.purchase_status == "sold":
+            sold_pct = 1.0
         else:
-            cuts = sorted(random.sample(range(1, total), n_inv - 1))
-            splits = [cuts[0]] + [cuts[i] - cuts[i-1] for i in range(1, len(cuts))] + [total - cuts[-1]]
+            sold_pct = round(random.uniform(0.20, 0.65), 2)
+
+        tokens_to_assign = max(1, int(investor_allocation * sold_pct))
+
+        # Cap n_inv so we always have enough tokens to split
+        max_inv = min(3, len(investors), tokens_to_assign)
+        n_inv = random.randint(1, max(1, max_inv))
+        selected = random.sample(investors, n_inv)
+
+        if n_inv == 1 or tokens_to_assign < n_inv:
+            splits = [tokens_to_assign]
+            selected = selected[:1]
+        else:
+            cuts = sorted(random.sample(range(1, tokens_to_assign), n_inv - 1))
+            splits = [cuts[0]] + [cuts[i] - cuts[i-1] for i in range(1, len(cuts))] + [tokens_to_assign - cuts[-1]]
+
         for inv, amount in zip(selected, splits):
             if amount < 1:
                 continue
@@ -887,27 +936,45 @@ def gen_transactions(users: list[User], herds: list[Herd]) -> list[str]:
     for h in herds:
         total = float(h.head_count * 1000)
         pool_sq = pool_subq(h.herd_id)
+
+        # Mint transaction records for all herds (token pool creation)
         out.append(
             "INSERT INTO transactions (user_id, pool_id, type, amount, status, blockchain_tx_hash) "
             f"VALUES ({q(admin.user_id)}, {pool_sq}, 'mint'::transaction_type, "
             f"{total}, 'confirmed', NULL);"
         )
+
+        # Pending herds have no investor buy/redeem transactions yet
+        if h.feedlot_status == "pending":
+            continue
+
+        investor_allocation = (total * h.investor_pct / 100.0) if h.investor_pct is not None else total
+
+        if h.purchase_status == "sold":
+            buy_pct = 1.0
+        else:
+            buy_pct = round(random.uniform(0.20, 0.60), 2)
+
         for _ in range(random.randint(1, 3)):
             inv = random.choice(investors)
-            amount = round(random.uniform(total * 0.05, total * 0.30), 6)
+            amount = round(random.uniform(investor_allocation * 0.05, investor_allocation * buy_pct * 0.5), 6)
+            amount = max(1.0, amount)
             out.append(
                 "INSERT INTO transactions (user_id, pool_id, type, amount, status, blockchain_tx_hash) "
                 f"VALUES ({q(inv.user_id)}, {pool_sq}, 'buy'::transaction_type, "
                 f"{amount}, 'confirmed', NULL);"
             )
+
         if h.purchase_status == "sold":
             inv = random.choice(investors)
             out.append(
                 "INSERT INTO transactions (user_id, pool_id, type, amount, status, blockchain_tx_hash) "
                 f"VALUES ({q(inv.user_id)}, {pool_sq}, 'redeem'::transaction_type, "
-                f"{total}, 'confirmed', NULL);"
+                f"{investor_allocation}, 'confirmed', NULL);"
             )
+
     return out
+
 
 
 # ---------------------------------------------------------------------------

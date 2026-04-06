@@ -1,22 +1,53 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, Settings, User, Warehouse } from "lucide-react";
+import { NavLink, Outlet, useLocation, useMatch, useNavigate } from "react-router-dom";
+import { LayoutDashboard, Settings, User, Warehouse, Tractor, LogOut } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const NAV_ITEMS = [
-  { to: "/investor", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/investor/holdings", label: "Lots", icon: Warehouse, end: false },
-  { to: "/rancher", label: "Rancher", icon: User, end: false },
-  { to: "/admin", label: "Admin", icon: Settings, end: false },
-] as const;
+import { useAuth } from "@/context/AuthContext";
 
 export function AppShell() {
-  const location = useLocation();
+  const location  = useLocation();
+  const navigate  = useNavigate();
+  const { currentUser, logout } = useAuth();
+
+  // Extract investor slug from URL if on an investor route
+  const investorMatch = useMatch("/investor/:slug/*");
+  const urlSlug = investorMatch?.params?.slug;
+
+  // Section label in the top header
   const sectionLabel = location.pathname.startsWith("/admin")
     ? "Administrator Portal"
     : location.pathname.startsWith("/rancher")
       ? "Rancher Portal"
-      : "Investor Portal";
+      : location.pathname.startsWith("/feedlot")
+        ? "Feedlot Portal"
+        : urlSlug
+          ? `Investor Portal — ${urlSlug}`
+          : "Portal";
+
+  // The slug to use in investor nav links comes from auth, not hardcoded
+  const investorSlug = currentUser?.role === "investor" ? currentUser.slug : "";
+
+  const NAV_ITEMS = [
+    ...(currentUser?.role === "investor" ? [
+      { to: `/investor/${investorSlug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, end: true },
+      { to: `/investor/${investorSlug}/holdings`, label: "Lots",      icon: Warehouse,       end: false },
+    ] : []),
+    ...(currentUser?.role === "rancher" ? [
+      { to: "/rancher", label: "My Herds", icon: User, end: false },
+    ] : []),
+    ...(currentUser?.role === "feedlot" ? [
+      { to: "/feedlot", label: "Feedlot", icon: Tractor, end: false },
+    ] : []),
+    ...(currentUser?.role === "admin" ? [
+      { to: "/admin", label: "Admin", icon: Settings, end: false },
+    ] : []),
+  ];
+
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -24,7 +55,7 @@ export function AppShell() {
       <aside className="hidden w-60 shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:flex-col">
         <div className="flex h-14 items-center px-4">
           <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            CattleToken
+            CattleCoin
           </span>
         </div>
         <Separator />
@@ -48,8 +79,22 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-        <div className="border-t border-sidebar-border px-4 py-3">
-          <p className="text-xs text-muted-foreground">MVP v0.1</p>
+        <div className="border-t border-sidebar-border px-4 py-3 space-y-2">
+          {currentUser && (
+            <div className="text-xs text-muted-foreground truncate">
+              <span className="font-medium text-foreground">{currentUser.slug}</span>
+              <span className="ml-1 capitalize text-muted-foreground">({currentUser.role})</span>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground px-0"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </Button>
         </div>
       </aside>
 
@@ -57,7 +102,7 @@ export function AppShell() {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header */}
         <header className="flex h-14 shrink-0 items-center border-b border-border bg-background px-6">
-          <h1 className="text-sm font-semibold md:hidden">CattleToken</h1>
+          <h1 className="text-sm font-semibold md:hidden">CattleCoin</h1>
           <div className="ml-auto flex items-center gap-4">
             <span className="text-xs text-muted-foreground">{sectionLabel}</span>
           </div>

@@ -15,6 +15,13 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { SexCode } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
+import {
+  postRancherCreateHerd,
+  postRancherPublishHerd,
+  postRancherRegisterCattleBulk,
+  type RancherBulkCowPayload,
+} from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +44,7 @@ interface CowFormData {
   official_id_suffix: string;
   breed_code: string;
   sex_code: SexCode | "";
+  birth_date: string;
   weight_lbs: string;
   animal_name: string;
   sire_registration_number: string;
@@ -123,10 +131,12 @@ function PillGroup<T extends string>({
   options,
   value,
   onChange,
+  disabled,
 }: {
   options: { value: T; label: string }[];
   value: T | "";
   onChange: (v: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
@@ -134,9 +144,11 @@ function PillGroup<T extends string>({
         <button
           key={opt.value}
           type="button"
+          disabled={disabled}
           onClick={() => onChange(opt.value)}
           className={cn(
             "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+            disabled && "cursor-not-allowed opacity-60",
             value === opt.value
               ? "border-primary bg-primary text-primary-foreground"
               : "border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
@@ -187,6 +199,7 @@ function rowToQueuedCow(row: Record<string, string | undefined>): QueuedCow {
     official_id_suffix: rawSuffix,
     breed_code: String(row.breed_code ?? "").toUpperCase(),
     sex_code: validSex.includes(rawSex as SexCode) ? (rawSex as SexCode) : "",
+    birth_date: String(row.birth_date ?? ""),
     weight_lbs: String(row.weight_lbs ?? ""),
     animal_name: String(row.animal_name ?? ""),
     sire_registration_number: String(row.sire_registration_number ?? ""),
@@ -200,6 +213,7 @@ function rowToQueuedCow(row: Record<string, string | undefined>): QueuedCow {
 // ── Rancher (main page) ───────────────────────────────────────────────────────
 
 export function Rancher() {
+  const { currentUser } = useAuth();
   const [step, setStep] = React.useState<1 | 2 | 3>(1);
 
   // Step 1
@@ -215,6 +229,14 @@ export function Rancher() {
 
   // Step 3
   const [published, setPublished] = React.useState(false);
+  const [createdHerdId, setCreatedHerdId] = React.useState<string | null>(null);
+  const [isCreatingHerd, setIsCreatingHerd] = React.useState(false);
+  const [isRegisteringCattle, setIsRegisteringCattle] = React.useState(false);
+  const [isPublishing, setIsPublishing] = React.useState(false);
+  const [cattleRegistered, setCattleRegistered] = React.useState(false);
+
+  const rancherId = currentUser?.userId ?? null;
+  const cattleLocked = cattleRegistered || isRegisteringCattle;
 
   // ── Step 1 handlers ──────────────────────────────────────────────────────────
 
@@ -222,9 +244,14 @@ export function Rancher() {
     setHerd((h) => ({ ...h, [key]: val }));
   }
 
-  function handleCreateHerd(e: React.FormEvent) {
+  async function handleCreateHerd(e: React.FormEvent) {
     e.preventDefault();
     setHerdError(null);
+
+    if (!rancherId) {
+      setHerdError("Missing logged-in rancher session.");
+      return;
+    }
 
     if (
       !herd.name.trim() ||
@@ -246,8 +273,29 @@ export function Rancher() {
       return;
     }
 
-    setHerdSnapshot({ ...herd });
-    setStep(2);
+    try {
+      setIsCreatingHerd(true);
+      const listingPrice = Number.parseFloat(herd.listing_price);
+      const headCount = Number.parseInt(herd.head_count, 10);
+
+      const result = await postRancherCreateHerd(rancherId, {
+        name: herd.name.trim(),
+        genetics_label: herd.genetics_label.trim(),
+        breed_code: herd.breed_code.trim().toUpperCase(),
+        season: herd.season,
+        listing_price: listingPrice,
+        head_count: headCount,
+        purchase_status: "pending",
+      });
+
+      setCreatedHerdId(result.herd.herd_id);
+      setHerdSnapshot({ ...herd });
+      setStep(2);
+    } catch (err: unknown) {
+      setHerdError(err instanceof Error ? err.message : "Failed to create herd.");
+    } finally {
+      setIsCreatingHerd(false);
+    }
   }
 
   // ── Step 2 handlers ──────────────────────────────────────────────────────────
@@ -268,23 +316,86 @@ export function Rancher() {
   }
 
   function handleRemoveCow(queueId: string) {
+    if (cattleRegistered) return;
     setCowQueue((q) => q.filter((c) => c._queueId !== queueId));
   }
 
-  function handleContinueToReview() {
+  async function handleContinueToReview() {
     setCattleError(null);
+
+    if (!rancherId) {
+      setCattleError("Missing logged-in rancher session.");
+      return;
+    }
+
+    if (!createdHerdId) {
+      setCattleError("Herd has not been created yet.");
+      return;
+    }
+
     if (cowQueue.length === 0) {
       setCattleError("Upload at least one cow before continuing.");
       return;
     }
-    setStep(3);
+
+    if (cattleRegistered) {
+      setStep(3);
+      return;
+    }
+
+    const cattlePayload: RancherBulkCowPayload[] = cowQueue.map((item) => ({
+      registration_number: item.registration_number.trim(),
+      official_id_suffix: item.official_id_suffix.trim(),
+      breed_code: item.breed_code.trim().toUpperCase(),
+      sex_code: item.sex_code as RancherBulkCowPayload["sex_code"],
+      birth_date: item.birth_date,
+      weight_lbs: Number.parseFloat(item.weight_lbs),
+      animal_name: item.animal_name.trim() || undefined,
+      sire_registration_number: item.sire_registration_number.trim() || undefined,
+      dam_registration_number: item.dam_registration_number.trim() || undefined,
+      is_genomic_enhanced: item.is_genomic_enhanced,
+    }));
+
+    try {
+      setIsRegisteringCattle(true);
+      await postRancherRegisterCattleBulk(rancherId, createdHerdId, cattlePayload);
+      setCattleRegistered(true);
+      setStep(3);
+    } catch (err: unknown) {
+      setCattleError(err instanceof Error ? err.message : "Failed to register cattle.");
+    } finally {
+      setIsRegisteringCattle(false);
+    }
   }
 
   // ── Step 3 handlers ──────────────────────────────────────────────────────────
 
-  function handlePublish() {
+  async function handlePublish() {
     if (cowQueue.length === 0) return;
-    setPublished(true);
+    setCattleError(null);
+    if (!createdHerdId) {
+      setCattleError("Missing herd id for publish.");
+      return;
+    }
+    if (!rancherId) {
+      setCattleError("Missing logged-in rancher session.");
+      return;
+    }
+
+    try {
+      setIsPublishing(true);
+      const listingPrice = Number.parseFloat(herdSnapshot?.listing_price ?? herd.listing_price);
+      await postRancherPublishHerd(
+        rancherId,
+        createdHerdId,
+        Number.isFinite(listingPrice) ? listingPrice : undefined
+      );
+      setPublished(true);
+    } catch (err: unknown) {
+      setCattleError(err instanceof Error ? err.message : "Failed to publish lot.");
+    } finally {
+      setIsPublishing(false);
+    }
   }
 
   function handleReset() {
@@ -293,6 +404,11 @@ export function Rancher() {
     setHerdSnapshot(null);
     setCowQueue([]);
     setPublished(false);
+    setCreatedHerdId(null);
+    setIsCreatingHerd(false);
+    setIsRegisteringCattle(false);
+    setIsPublishing(false);
+    setCattleRegistered(false);
     setHerdError(null);
     setUploadError(null);
     setCattleError(null);
@@ -350,6 +466,7 @@ export function Rancher() {
                 <Input
                   placeholder="e.g. Spring Angus — 2026"
                   value={herd.name}
+                  disabled={isCreatingHerd}
                   onChange={(e) => setHerdField("name", e.target.value)}
                 />
               </Field>
@@ -359,6 +476,7 @@ export function Rancher() {
                   <Input
                     placeholder="e.g. Angus × Hereford"
                     value={herd.genetics_label}
+                    disabled={isCreatingHerd}
                     onChange={(e) => setHerdField("genetics_label", e.target.value)}
                   />
                 </Field>
@@ -366,6 +484,7 @@ export function Rancher() {
                   <Input
                     placeholder="e.g. AN"
                     value={herd.breed_code}
+                    disabled={isCreatingHerd}
                     onChange={(e) =>
                       setHerdField("breed_code", e.target.value.toUpperCase())
                     }
@@ -377,6 +496,7 @@ export function Rancher() {
                 <PillGroup
                   options={SEASON_OPTIONS}
                   value={herd.season}
+                  disabled={isCreatingHerd}
                   onChange={(v) => setHerdField("season", v)}
                 />
               </Field>
@@ -389,6 +509,7 @@ export function Rancher() {
                     step="0.01"
                     placeholder="e.g. 250000"
                     value={herd.listing_price}
+                    disabled={isCreatingHerd}
                     onChange={(e) => setHerdField("listing_price", e.target.value)}
                   />
                 </Field>
@@ -399,6 +520,7 @@ export function Rancher() {
                     step="1"
                     placeholder="e.g. 50"
                     value={herd.head_count}
+                    disabled={isCreatingHerd}
                     onChange={(e) => setHerdField("head_count", e.target.value)}
                   />
                 </Field>
@@ -448,8 +570,8 @@ export function Rancher() {
               )}
 
               <div className="flex justify-end pt-2">
-                <Button type="submit">
-                  Create Herd
+                <Button type="submit" disabled={isCreatingHerd}>
+                  {isCreatingHerd ? "Creating Herd..." : "Create Herd"}
                   <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
               </div>
@@ -469,7 +591,7 @@ export function Rancher() {
                 should include columns:{" "}
                 <span className="font-mono text-xs">
                   registration_number, official_id_suffix, breed_code, sex_code
-                  (B/C/H/S), weight_lbs
+                  (B/C/H/S), birth_date (YYYY-MM-DD), weight_lbs
                 </span>
                 . Optional:{" "}
                 <span className="font-mono text-xs">
@@ -491,6 +613,7 @@ export function Rancher() {
                 <ImporterField name="official_id_suffix" label="Official ID Suffix (12-digit EID)" optional />
                 <ImporterField name="breed_code" label="Breed Code" />
                 <ImporterField name="sex_code" label="Sex Code (B/C/H/S)" />
+                <ImporterField name="birth_date" label="Birth Date (YYYY-MM-DD)" />
                 <ImporterField name="weight_lbs" label="Weight (lbs)" />
                 <ImporterField name="animal_name" label="Animal Name" optional />
                 <ImporterField name="sire_registration_number" label="Sire Registration #" optional />
@@ -547,6 +670,7 @@ export function Rancher() {
                   </div>
                   <button
                     type="button"
+                    disabled={cattleLocked}
                     onClick={() => handleRemoveCow(c._queueId)}
                     className="ml-4 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     aria-label="Remove cow"
@@ -561,16 +685,25 @@ export function Rancher() {
           {cattleError && (
             <p className="text-sm text-destructive">{cattleError}</p>
           )}
+          {cattleRegistered && (
+            <p className="text-sm text-muted-foreground">
+              Cattle registered successfully. Continue to review and publish.
+            </p>
+          )}
 
           <div className="flex justify-between pt-2">
-            <Button variant="outline" onClick={() => setStep(1)}>
+            <Button
+              variant="outline"
+              onClick={() => setStep(1)}
+              disabled={isRegisteringCattle}
+            >
               Back
             </Button>
             <Button
               onClick={handleContinueToReview}
-              disabled={cowQueue.length === 0}
+              disabled={cowQueue.length === 0 || isRegisteringCattle}
             >
-              Continue to Review
+              {isRegisteringCattle ? "Registering Cattle..." : "Continue to Review"}
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
@@ -658,11 +791,11 @@ export function Rancher() {
           </Card>
 
           <div className="flex justify-between pt-2">
-            <Button variant="outline" onClick={() => setStep(2)}>
+            <Button variant="outline" onClick={() => setStep(2)} disabled={isPublishing}>
               Back
             </Button>
-            <Button onClick={handlePublish} disabled={cowQueue.length === 0}>
-              Publish Lot
+            <Button onClick={handlePublish} disabled={cowQueue.length === 0 || isPublishing}>
+              {isPublishing ? "Publishing Lot..." : "Publish Lot"}
             </Button>
           </div>
         </div>

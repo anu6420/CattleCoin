@@ -50,7 +50,7 @@ This will apply every `*.sql` file in `BackEnd/Database/migrations/` in filename
 Default local connection:
 
 - Host: `localhost`
-- Port: `5432`
+- Port: `5433`
 - Database: `cattlecoin`
 - User: `cattlecoin`
 - Password: `cattlecoin`
@@ -58,7 +58,7 @@ Default local connection:
 Connection string (example):
 
 ```
-postgresql://cattlecoin:cattlecoin@localhost:5432/cattlecoin
+postgresql://cattlecoin:cattlecoin@localhost:5433/cattlecoin
 ```
 
 ---

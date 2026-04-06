@@ -50,7 +50,7 @@ Confirm the container is running:
 
 ```bash
 docker ps
-# should show cattlecoin-db on port 5432
+# should show cattlecoin-db with host port 5433
 ```
 
 ### 3 — Run migrations
@@ -92,7 +92,7 @@ Open **http://localhost:5173** — you will be redirected to `/investor`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://cattlecoin:cattlecoin@localhost:5432/cattlecoin` | Backend DB connection string |
+| `DATABASE_URL` | `postgresql://cattlecoin:cattlecoin@localhost:5433/cattlecoin` | Backend DB connection string |
 | `POSTGRES_DB` | `cattlecoin` | Database name (Docker) |
 | `POSTGRES_USER` | `cattlecoin` | Database user (Docker) |
 | `POSTGRES_PASSWORD` | `cattlecoin` | Database password (Docker) |
@@ -104,7 +104,7 @@ Open **http://localhost:5173** — you will be redirected to `/investor`.
 ## Database
 
 - **Engine**: PostgreSQL 16 via Docker
-- **Connection**: `postgresql://cattlecoin:cattlecoin@localhost:5432/cattlecoin`
+- **Connection**: `postgresql://cattlecoin:cattlecoin@localhost:5433/cattlecoin`
 - **Schema**: See `erd.html` (open in any browser) or `BackEnd/Database/README.md`
 - **Migrations**: `BackEnd/Database/migrations/`
 

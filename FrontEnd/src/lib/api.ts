@@ -1,101 +1,271 @@
-import type { Pool, Cow, CowDetailData, PoolDetail, PortfolioSummary } from "./types";
-import {
-  POOLS,
-  COWS,
-  buildPoolBudget,
-  buildPoolHistory,
-  buildPortfolioHistory,
-  getRecentEvents,
-  getPoolEvents,
-  getPoolCows as getPoolCowsMock,
-  getPoolDocuments,
-  getCowWeights,
-  getCowEPDs,
-  getCowHealthRecords,
-  getCowValuations,
-} from "./mock";
+import type {
+  Pool,
+  Cow,
+  CowDetailData,
+  PoolDetail,
+  PortfolioSummary,
+  HerdInvestInfo,
+  InvestPayload,
+  InvestResult,
+  FeedlotHerd,
+  FeedlotDashboard,
+  FeedlotClaimPayload,
+  FeedlotClaimResult,
+} from "./types";
 
-// Simulates network latency for realistic loading states.
-function delay(ms = 400): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const API_BASE = "/api";
+
+async function fetchJSON<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${path} → ${res.status}: ${body}`);
+  }
+  return res.json() as Promise<T>;
 }
 
-// TODO: replace with fetch('/api/portfolio')
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string; message?: string };
+    return body.error ?? body.message ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── Portfolio (global, used by Admin) ───────────────────────────────────────
 export async function getPortfolio(): Promise<PortfolioSummary> {
-  await delay();
-
-  const portfolioValueUsd = POOLS.reduce((s, p) => s + p.positionValueUsd, 0);
-  const avgRisk = Math.round(
-    POOLS.reduce((s, p) => s + (p.netExpectedUsd / p.listingPrice) * 100, 0) /
-      POOLS.length,
-  );
-
-  const topPools = [...POOLS]
-    .sort((a, b) => b.positionValueUsd - a.positionValueUsd)
-    .slice(0, 5);
-
-  return {
-    asOfIso: new Date().toISOString(),
-    portfolioValueUsd,
-    change30dPct: 4.2,
-    poolsHeld: POOLS.length,
-    avgRisk,
-    history30d: buildPortfolioHistory(),
-    recentEvents: getRecentEvents(8),
-    topPools,
-  };
+  return fetchJSON("/portfolio");
 }
 
-// TODO: replace with fetch('/api/pools')
+// ─── Per-investor portfolio (Dashboard) ──────────────────────────────────────
+export async function getInvestorPortfolio(slug: string): Promise<PortfolioSummary> {
+  return fetchJSON(`/investors/${slug}/portfolio`);
+}
+
+// ─── Per-investor holdings (Holdings page) ────────────────────────────────────
+export async function getInvestorHoldings(slug: string): Promise<Pool[]> {
+  return fetchJSON(`/investors/${slug}/holdings`);
+}
+
+// ─── Pools / Herds ────────────────────────────────────────────────────────────
 export async function getPools(): Promise<Pool[]> {
-  await delay();
-  return [...POOLS];
+  return fetchJSON("/pools");
 }
 
-// fetch('/api/pools')
-// export async function getPools(): Promise<Pool[]> {
-//   const res = await fetch(`${API_BASE}/pools`);
-
-//   if (!res.ok) {
-//     throw new Error("Failed to fetch pools");
-//   }
-
-//   return res.json();
-// }
-
-// TODO: replace with fetch(`/api/pools/${poolId}`)
 export async function getPoolById(poolId: string): Promise<PoolDetail | null> {
-  await delay(500);
-  const pool = POOLS.find((p) => p.id === poolId);
-  if (!pool) return null;
-
-  return {
-    pool,
-    lifecycle: getPoolEvents(poolId),
-    budgetBreakdown: buildPoolBudget(poolId),
-    valuationHistory30d: buildPoolHistory(pool),
-    documents: getPoolDocuments(pool),
-  };
+  try {
+    return await fetchJSON(`/pools/${poolId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
 }
 
-// TODO: replace with fetch(`/api/pools/${poolId}/cows`)
 export async function getPoolCows(poolId: string): Promise<Cow[]> {
-  await delay(300);
-  return getPoolCowsMock(poolId);
+  return fetchJSON(`/pools/${poolId}/cows`);
 }
 
-// TODO: replace with fetch(`/api/cows/${cowId}`)
-// Returns full CowDetailData including weights, EPDs, health records, and valuations.
+// ─── Individual Cow ───────────────────────────────────────────────────────────
 export async function getCowById(cowId: string): Promise<CowDetailData | null> {
-  await delay(300);
-  const cow = COWS.find((c) => c.cowId === cowId);
-  if (!cow) return null;
+  try {
+    return await fetchJSON(`/cows/${cowId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
+}
 
-  return {
-    cow,
-    weights: getCowWeights(cowId),
-    epds: getCowEPDs(cowId),
-    healthRecords: getCowHealthRecords(cowId),
-    valuations: getCowValuations(cowId),
+// ─── Invest ───────────────────────────────────────────────────────────────────
+export async function getHerdForInvest(herdId: string): Promise<HerdInvestInfo | null> {
+  try {
+    return await fetchJSON(`/invest/${herdId}`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("404")) return null;
+    throw err;
+  }
+}
+
+export async function postInvestment(payload: InvestPayload): Promise<InvestResult> {
+  const res = await fetch(`${API_BASE}/invest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(body || `Investment failed: ${res.status}`);
+  }
+  return res.json() as Promise<InvestResult>;
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+import type { CurrentUser } from "@/context/AuthContext";
+
+export async function postLogin(username: string, password: string): Promise<CurrentUser> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: "Login failed" }));
+    throw new Error(body.error ?? "Login failed");
+  }
+  return res.json() as Promise<CurrentUser>;
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+export type UserSummary = {
+  userId: string;
+  slug:   string;
+  role:   string;
+  email:  string;
+};
+
+export async function getUsersByRole(role: string): Promise<UserSummary[]> {
+  return fetchJSON(`/users?role=${encodeURIComponent(role)}`);
+}
+
+// ─── Feedlot ─────────────────────────────────────────────────────────────────
+
+/** Herds that ranchers listed but no feedlot has claimed yet */
+export async function getFeedlotPendingHerds(): Promise<FeedlotHerd[]> {
+  return fetchJSON("/feedlot/pending");
+}
+
+/** Herds claimed by this feedlot (listed/sold) */
+export async function getFeedlotDashboard(slug: string): Promise<FeedlotDashboard> {
+  return fetchJSON(`/feedlot/${slug}/dashboard`);
+}
+
+/** Feedlot claims a pending herd and sets investor percentage */
+export async function postFeedlotClaim(payload: FeedlotClaimPayload): Promise<FeedlotClaimResult> {
+  const res = await fetch(`${API_BASE}/feedlot/claim`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(body || `Claim failed: ${res.status}`);
+  }
+  return res.json() as Promise<FeedlotClaimResult>;
+}
+
+// ─── Rancher ─────────────────────────────────────────────────────────────────
+
+export type RancherCreateHerdPayload = {
+  name: string;
+  genetics_label: string;
+  breed_code: string;
+  season: "Spring" | "Fall";
+  listing_price: number;
+  head_count: number;
+  purchase_status?: "available" | "pending" | "sold";
+};
+
+export type RancherCreateHerdResult = {
+  message: string;
+  herd: {
+    herd_id: string;
+    herd_name: string;
+    listing_price: string | number | null;
+    purchase_status: string;
   };
+};
+
+export type RancherBulkCowPayload = {
+  registration_number: string;
+  official_id_suffix: string;
+  breed_code: string;
+  sex_code: "B" | "C" | "H" | "S";
+  birth_date: string;
+  weight_lbs: number;
+  animal_name?: string;
+  sire_registration_number?: string;
+  dam_registration_number?: string;
+  is_genomic_enhanced?: boolean;
+};
+
+export type RancherBulkRegisterResult = {
+  message: string;
+  herdId: string;
+  count: number;
+  items: Array<{
+    cow: { animal_id: number; registration_number: string; official_id: string | null };
+  }>;
+};
+
+export type RancherPublishResult = {
+  message: string;
+  herd: {
+    herd_id: string;
+    purchase_status: string;
+    listing_price: string | number | null;
+  };
+};
+
+export async function postRancherCreateHerd(
+  rancherId: string,
+  payload: RancherCreateHerdPayload
+): Promise<RancherCreateHerdResult> {
+  const res = await fetch(`${API_BASE}/herds`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to create herd (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherCreateHerdResult>;
+}
+
+export async function postRancherRegisterCattleBulk(
+  rancherId: string,
+  herdId: string,
+  cattle: RancherBulkCowPayload[]
+): Promise<RancherBulkRegisterResult> {
+  const res = await fetch(`${API_BASE}/herds/${herdId}/cattle/bulk`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify({ cattle }),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to register cattle (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherBulkRegisterResult>;
+}
+
+export async function postRancherPublishHerd(
+  rancherId: string,
+  herdId: string,
+  listingPrice?: number
+): Promise<RancherPublishResult> {
+  const res = await fetch(`${API_BASE}/herds/${herdId}/publish`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-rancher-id": rancherId,
+    },
+    body: JSON.stringify(
+      listingPrice === undefined ? {} : { listingPrice }
+    ),
+  });
+
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to publish herd (${res.status}).`));
+  }
+
+  return res.json() as Promise<RancherPublishResult>;
 }
